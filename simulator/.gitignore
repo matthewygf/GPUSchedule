@@ -3,3 +3,6 @@ result*
 __pycache__
 test*
 plot*
+
+**/*.csv
+**/*.log

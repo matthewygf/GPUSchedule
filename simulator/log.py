@@ -19,8 +19,8 @@ JOBS = jobs.JOBS
 
 class _Log(object):
 
-    def __init__(self):
-        self.log_path = ''
+    def __init__(self, path):
+        self.log_path = path
         self.log_file = ''
         self.log_cpu = ''
         self.log_gpu = ''
@@ -35,20 +35,6 @@ class _Log(object):
         self.mem_list = list()
 
     def init_log(self):
-        self.log_path = FLAGS.log_path
-        if self.log_path[-1] == '/':
-            self.log_path = self.log_path[:-1]
-        util.print_fn(self.log_path)
-        util.print_fn(' ')
-
-        #prepare folder
-        cmd = 'mkdir -p ' + self.log_path
-        ''' python 2.7
-        status, output = commands.getstatusoutput(cmd)
-        '''
-        #python 2.7 & 3
-        ret = subprocess.check_output(cmd, shell=True)
-
         self.log_file = self.log_path + '/cluster.csv'
         self.log_job = self.log_path + '/job.csv'
         if FLAGS.scheme != 'count':
@@ -370,7 +356,6 @@ class _Log(object):
             self.dump_job_logs()
 
 
-LOG = _Log()
 
 _allowed_symbols = [
     'LOG'

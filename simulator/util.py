@@ -3,12 +3,17 @@ import sys
 import subprocess
 import flags 
 FLAGS = flags.FLAGS
+import os
+import logging
 
 def print_fn(log):
     if FLAGS.print:
-        print(log)
-        if FLAGS.flush_stdout:
-            sys.stdout.flush()
+        logging.info(log)
+
+def make_dir_if_not_exist(local_path):
+    if not os.path.exists(local_path):
+        os.makedirs(local_path)
+        logging.info('Created directory %s', local_path)
 
 
 def mkdir(folder_path):

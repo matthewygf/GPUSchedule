@@ -16,6 +16,8 @@ import jobs
 import cluster
 import log
 import lp
+import logging
+import datetime
 
 # import hosts
 # import placement_scheme as scheme
@@ -92,7 +94,7 @@ JOBS = jobs.JOBS
 CLUSTER = cluster.CLUSTER
 
 #get LOG object
-LOG = log.LOG
+LOG = None
 
 
 def parse_job_file(trace_file):
@@ -2099,5 +2101,18 @@ def main():
         one_queue_fifo_sim_jobs()
 
 if __name__ == '__main__':
-    # print('Hello world %d' % 2)
+    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)  # pylint: disable=line-too-long
+    execution_id = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')
+    output_dir = os.path.join(FLAGS.log_path, execution_id)
+    util.make_dir_if_not_exist(output_dir)
+    log_file = os.path.join(output_dir, 'output.log')
+    filehandler = logging.FileHandler(
+        filename=log_file, mode='w')
+    filehandler.setFormatter(
+        logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
+    logging.getLogger().addHandler(filehandler)
+    global LOG 
+    LOG = log._Log(output_dir)
     main()
+    
+    logging.getLogger().removeHandler(filehandler)
