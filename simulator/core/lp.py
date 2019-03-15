@@ -56,15 +56,11 @@ from cplex.six.moves import range
 
 import util
 import flags 
-import jobs
 import cluster
 import switch
 import node
 FLAGS = flags.FLAGS
 CLUSTER = cluster.CLUSTER
-JOBS = jobs.JOBS
-
-
 '''
 sample data:
 j: [ps0, ps1, ps2, w0, w1, w2]

@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import util
+from core import util
 
 '''
 TODO: add cpu and network load support in class _Node

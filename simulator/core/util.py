@@ -1,13 +1,10 @@
 from __future__ import print_function
 import sys
 import subprocess
-import flags 
-FLAGS = flags.FLAGS
 import os
 import logging
 
 def print_fn(log):
-    if FLAGS.print:
         logging.info(log)
 
 def make_dir_if_not_exist(local_path):

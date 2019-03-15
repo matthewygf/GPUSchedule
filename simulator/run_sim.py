@@ -10,12 +10,13 @@ import argparse
 import copy
 import os
 
-import util
-import flags
-import jobs
-import cluster
-import log
-import lp
+from core import util
+from core import flags
+from core import jobs
+from infra import cluster
+from core import log
+from core import lp
+from core import schedule as scheduler
 import logging
 import datetime
 
@@ -87,15 +88,8 @@ flags.DEFINE_version('0.1')
 
 FLAGS = flags.FLAGS
 
-#prepare JOBS list
-JOBS = jobs.JOBS
-
 #get host info
 CLUSTER = cluster.CLUSTER
-
-#get LOG object
-LOG = None
-
 
 def parse_job_file(trace_file):
     #check trace_file is *.csv
@@ -176,37 +170,6 @@ def parse_cluster_spec():
     util.print_fn('--------------------------------- End of cluster spec ---------------------------------')
     return 
 
-
-'''
-Allocate job resource
-'''
-def try_get_job_res(job):
-    '''
-    select placement scheme
-    '''
-    if FLAGS.scheme == 'yarn':
-        ret = CLUSTER.ms_yarn_placement(job)
-    elif FLAGS.scheme == 'balance':
-        ret = lp.placement(job)
-        # ret = lp.min_new_job(job)
-    elif FLAGS.scheme == 'random':
-        ret = CLUSTER.random_placement(job)
-    elif FLAGS.scheme == 'crandom':
-        ret = CLUSTER.consolidate_random_placement(job)
-    elif FLAGS.scheme == 'greedy':
-        ret = CLUSTER.greedy_placement(job)
-    elif FLAGS.scheme == 'gandiva':
-        ret = CLUSTER.gandiva_placement(job)
-    elif FLAGS.scheme == 'count':
-        ret = CLUSTER.none_placement(job)
-    else:
-        ret = CLUSTER.ms_yarn_placement(job)
-    if ret == True:
-        # job['status'] = 'RUNNING'
-        pass
-    return ret
-
-
 '''
 Gandiva scheduler assumption
 ''' 
@@ -231,7 +194,7 @@ def gandiva_sim_jobs(gputime=False, solve_starvation=0):
         if event != None:
             #for new-start jobs, try to start
             for s_job in event['start_jobs']:
-                ret = try_get_job_res(s_job)
+                ret = scheduler.try_get_job_res(CLUSTER, s_job)
                 if ret == False:
                     JOBS.move_to_pending(s_job)
                 else:
@@ -244,7 +207,7 @@ def gandiva_sim_jobs(gputime=False, solve_starvation=0):
 
         if node_release: 
             for p_job in JOBS.pending_jobs:
-                ret = try_get_job_res(p_job)
+                ret = scheduler.try_get_job_res(CLUSTER, p_job)
                 if ret == True:
                     JOBS.remove_from_pending(p_job, cur_time)
                     p_job['start_time'] = cur_time
@@ -308,7 +271,7 @@ def one_queue_fifo_sim_jobs():
             new_start_list = list()
             for p_job in JOBS.pending_jobs:
                 # ret = CLUSTER.alloc_gpus(p_job)
-                ret = try_get_job_res(p_job)
+                ret = scheduler.try_get_job_res(CLUSTER, p_job)
                 if ret == True:
                     ''' if remove_from_pending, then will miss the next p_job in the list '''
                     new_start_list.append(p_job)
@@ -325,66 +288,6 @@ def one_queue_fifo_sim_jobs():
                 JOBS.add_job_end_event(ns_job)
                 util.print_fn('----job[%d] starts from pending' % ns_job['job_idx'])
 
-
-        #sort pending jobs based on the num_gpu
-        #JOBS.pending_jobs.sort(key = lambda e:e.__getitem__('num_gpu'))
-
-        #remove time_event
-        JOBS.job_events.pop(0)
-        JOBS.job_events.sort(key = lambda e:e.__getitem__('time'))
-        # JOBS.print_job_events()
-
-        LOG.checkpoint(event_time)
-
-
-def fit_first_sim_jobs():
-    '''
-    new jobs are added to the end of the ending queue
-    but any fit job should be executed in fifo order
-    '''
-    while (len(JOBS.job_events) + len(JOBS.pending_jobs))> 0:
-        if len(JOBS.job_events) == 0:
-            util.print_fn("This cluster is not large enough to run the job")
-            break
-
-        event = JOBS.job_events[0]
-        event_time = event['time']
-        # util.print_fn('--------------------------------- Handle event[time %d]------------------------------------' % event_time)
-        #for ending jobs, release gpu
-        for e_job in event['end_jobs']:
-            #remove from migratable jobs, if it's there
-            # JOBS.remote_migratable(e_job)
-
-            #job completes
-            CLUSTER.release_job_res(e_job)
-            # CLUSTER.release_gpus(e_job)
-            LOG.job_complete(e_job, event_time)
-
-
-        #for new-start jobs, try to start
-        for s_job in event['start_jobs']:
-            #add into pending list
-            JOBS.move_to_pending(s_job)
-
-        new_start_list = list()
-        for p_job in JOBS.pending_jobs:
-            # ret = CLUSTER.alloc_gpus(p_job)
-            if CLUSTER.check_free_gpu() <= 0:
-                break
-            ret = try_get_job_res(p_job)
-            if ret == True:
-                ''' if remove_from_pending, then will miss the next p_job in the list '''
-                new_start_list.append(p_job)
-                # JOBS.remove_from_pending(p_job, event_time)
-                # JOBS.add_job_end_event(p_job)
-                # util.print_fn('----job[%d] starts from pending' % p_job['job_idx'])
-            else:
-                continue
-
-        for ns_job in new_start_list:
-            JOBS.remove_from_pending(ns_job, event_time)
-            JOBS.add_job_end_event(ns_job)
-            util.print_fn('----job[%d] starts from pending' % ns_job['job_idx'])
 
         #sort pending jobs based on the num_gpu
         #JOBS.pending_jobs.sort(key = lambda e:e.__getitem__('num_gpu'))
@@ -537,7 +440,7 @@ def smallest_first_sim_jobs(gputime=False):
             if 'RUNNING' == rjob['status']:
                 if 'placements' in rjob: 
                     del rjob['placements'][:]
-            ret = try_get_job_res(rjob) 
+            ret = scheduler.try_get_job_res(CLUSTER, rjob) 
             if True == ret:
                 # rjob['status'] = 'RUNNING'
                 # if 0 == rjob['start_time'] and 0 != rjob['submit_time']:
@@ -682,7 +585,7 @@ def shortest_first_sim_jobs(gputime=False):
             if 'RUNNING' == rjob['status']:
                 if 'placements' in rjob: 
                     del rjob['placements'][:]
-            ret = try_get_job_res(rjob) 
+            ret = scheduler.try_get_job_res(CLUSTER, rjob) 
             if True == ret:
                 # rjob['status'] = 'RUNNING'
                 # if 0 == rjob['start_time'] and 0 != rjob['submit_time']:
@@ -1811,7 +1714,7 @@ def longest_pending_first_sim_jobs():
         #for pending jobs, try to start
         for p_job in JOBS.pending_jobs:
             # ret = CLUSTER.alloc_gpus(p_job)
-            ret = try_get_job_res(p_job)
+            ret = scheduler.try_get_job_res(CLUSTER, p_job)
             if ret == True:
                 #if job is migratable, add into migratable job list
                 # JOBS.add_migratable(p_job)
@@ -1861,7 +1764,7 @@ def sim_job_events():
         #for pending jobs, try to start
         for p_job in JOBS.pending_jobs:
             # ret = CLUSTER.alloc_gpus(p_job)
-            ret = try_get_job_res(p_job)
+            ret = scheduler.try_get_job_res(CLUSTER, p_job)
             if ret == True:
                 #if job is migratable, add into migratable job list
                 # JOBS.add_migratable(p_job)
@@ -1875,7 +1778,7 @@ def sim_job_events():
 
         #for new-start jobs, try to start
         for s_job in event['start_jobs']:
-            ret = try_get_job_res(s_job)
+            ret = scheduler.try_get_job_res(CLUSTER, s_job)
             # ret = CLUSTER.alloc_gpus(s_job)
             if ret == False:
                 #allocation failed, add into pending jobs
@@ -2027,12 +1930,11 @@ def main():
     # lp.placement(JOBS.job_list[0])
     ''' Prepare jobs'''
     JOBS.prepare_job_start_events()
-
     # sim_job_events()
     if FLAGS.schedule == 'fifo':
         one_queue_fifo_sim_jobs()
     elif FLAGS.schedule == 'fjf':
-        fit_first_sim_jobs()
+        scheduler.fit_first_sim_jobs(JOBS, CLUSTER, LOG)
     elif FLAGS.schedule == 'sjf':
         smallest_first_sim_jobs(False)
     elif FLAGS.schedule == 'lpjf':
@@ -2112,6 +2014,8 @@ if __name__ == '__main__':
         logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
     logging.getLogger().addHandler(filehandler)
     global LOG 
+    global JOBS
+    JOBS = jobs._TFJobs(FLAGS)
     LOG = log._Log(output_dir)
     main()
     

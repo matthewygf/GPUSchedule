@@ -3,20 +3,18 @@ from __future__ import division
 from __future__ import print_function
 
 
-from node import _Node
-import flags 
-import util
-import jobs
+from infra.node import _Node
+from core import flags 
+from core import util
+from core import jobs
 import math
-
-FLAGS = flags.FLAGS
-JOBS = jobs.JOBS
-
 
 class _Switch(object):
 
-    def __init__(self, id, num_node=0, num_gpu_p_node=0, num_cpu_p_node=0, mem_p_node=0):
+    def __init__(self, id, flags, job_queue, num_node=0, num_gpu_p_node=0, num_cpu_p_node=0, mem_p_node=0):
         self.num_node = num_node
+        self.flags = flags
+        self.job_queue = job_queue
         self.num_gpu_p_node = num_gpu_p_node
         self.num_cpu_p_node = num_cpu_p_node
         self.mem_p_node = mem_p_node

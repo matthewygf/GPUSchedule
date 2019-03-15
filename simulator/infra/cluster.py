@@ -3,10 +3,10 @@ from __future__ import division
 from __future__ import print_function
 import math
 import random
-from switch import _Switch
-from node import _Node
-import util
-import flags 
+from infra.switch import _Switch
+from infra.node import _Node
+from core import util
+from core import flags 
 # import jobs
 # import log
 

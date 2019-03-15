@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import random
-import util
+from core import util
 
 m_tensors = [[1.1,2.3,2.3,2.3,4.5,9.0,9.0,9.0,9.0,9.0,9.0,9.0,392.0,64.0,15.6],
 [1.1,2.3,2.3,4.5,9.0,9.0,9.0,9.0,9.0,392.0,64.0,15.6],

@@ -14,8 +14,8 @@ ERROR
 '''
 import numpy
 import math
-import util
-import models
+from core import util
+from core import models
 import csv
 import time
 import sys
@@ -26,8 +26,6 @@ import sys
 
 # #get host info
 # CLUSTER = cluster.CLUSTER
-import flags
-FLAGS = flags.FLAGS
 
 class _TFJobs(object):
 
@@ -82,7 +80,7 @@ class _TFJobs(object):
             # return int((len(self.running_jobs) + len(self.pending_jobs)) * self.num_gpu)
             return int(len(self.runnable_jobs) * self.num_gpu)
 
-    def __init__(self):
+    def __init__(self, flags):
         self.num_job = 0        
         self.job_list = list()
         ''' job events is a list of tuple
@@ -91,6 +89,7 @@ class _TFJobs(object):
             'start_jobs': [xxx,xxx,xxx]
             'end_jobs': [xxx,xxx,xxx]
         '''
+        self.flags = flags
         self.job_events = list()        
         #holding pending jobs, add job_idx
         self.pending_jobs = list() # [{job_dict}, {job_dict}]
@@ -248,8 +247,7 @@ class _TFJobs(object):
 
         self.job_list.append(job_dict)
         self.num_job += 1
-
-        if FLAGS.schedule == 'multi-dlas-gpu':
+        if self.flags.schedule == 'multi-dlas-gpu':
             num_gpu = job_dict['num_gpu']
             if num_gpu not in self.gpu_job:
                 # add that job class
@@ -349,7 +347,7 @@ class _TFJobs(object):
         self.job_list.sort(key = lambda e:e.__getitem__('submit_time'))
         util.print_fn('   Jobs are sorted with their start time')
         # self.read_all_jobs()
-        if FLAGS.schedule == 'multi-dlas-gpu' and FLAGS.scheme == 'count':
+        if self.flags.schedule == 'multi-dlas-gpu' and self.flags.scheme == 'count':
             for num_gpu, gjob in self.gpu_job.items():
                 util.print_fn('%d-GPU jobs have %d ' % (num_gpu, gjob.total_job))
 
@@ -441,7 +439,7 @@ class _TFJobs(object):
         job['pending_time'] = 0
         job['last_pending_time'] = 0 # how much pending_time the job has since last entering the highest priority queue
 
-        if FLAGS.schedule == 'multi-dlas-gpu':
+        if self.flags.schedule == 'multi-dlas-gpu':
             num_gpu = job['num_gpu']
             self.gpu_job[num_gpu].runnable_jobs.append(job)
         else:
@@ -574,7 +572,7 @@ class _TFJobs(object):
         self.gpu_job[num_gpu] = self.gpu_job[num_gpu] - 1
 
     def end_job(self, e_job):
-        if FLAGS.schedule != 'multi-dlas-gpu':
+        if self.flags.schedule != 'multi-dlas-gpu':
             util.print_fn("Not multi-dlas-gpu")
             exit()
         
@@ -696,10 +694,3 @@ class _TFJobs(object):
         self.gpu_job[16].runnable_jobs.extend([5,6,7,8,9])
 
         self.reserve_gpus(total_num)
-
-JOBS = _TFJobs()
-
-
-_allowed_symbols = [
-    'JOBS'
-]
