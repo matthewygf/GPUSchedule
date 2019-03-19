@@ -6,14 +6,14 @@ import subprocess
 import csv
 import math
 
-import util
-import flags 
-import cluster 
-import jobs
+from core import util
+from core import flags
+from core import jobs
+
+from infra import cluster
 
 FLAGS = flags.FLAGS
 CLUSTER = cluster.CLUSTER
-JOBS = jobs.JOBS
 
 
 
@@ -44,30 +44,30 @@ class _Log(object):
             self.log_mem = self.log_path + '/memory.csv'
 
         fd = open(self.log_file, 'w+')
-        log_writer = csv.writer(fd)  
+        log_writer = csv.writer(fd)
         if FLAGS.scheme == 'gandiva':
             log_writer.writerow(['time', 'idle_node', 'busy_node', 'full_node', 'fra_gpu', 'busy_gpu', 'pending_job', 'running_job', 'completed_job', 'len_g1', 'len_g2', 'len_g4', 'len_g8', 'len_g16', 'len_g32', 'len_g64'])
         else:
             log_writer.writerow(['time', 'idle_node', 'busy_node', 'full_node', 'idle_gpu', 'busy_gpu', 'pending_job', 'running_job', 'completed_job'])
         fd.close()
-    
+
 
         if FLAGS.scheme != 'count':
             fd = open(self.log_cpu, 'w+')
-            log_writer = csv.writer(fd)  
+            log_writer = csv.writer(fd)
             log_writer.writerow(['time'] + ['cpu'+str(i) for i in range(CLUSTER.num_node)])
             ''''if combine all the info together
-            log_writer.writerow(['cpu'+str(i) for i in range(CLUSTER.num_node)] 
-                                + ['gpu'+str(i) for i in range(CLUSTER.num_node)] 
+            log_writer.writerow(['cpu'+str(i) for i in range(CLUSTER.num_node)]
+                                + ['gpu'+str(i) for i in range(CLUSTER.num_node)]
                                 + ['net'+str(i) for i in range(CLUSTER.num_node)])
             '''
             fd.close()
             fd = open(self.log_gpu, 'w+')
-            log_writer = csv.writer(fd)  
+            log_writer = csv.writer(fd)
             log_writer.writerow(['time'] + ['gpu'+str(i) for i in range(CLUSTER.num_node)])
             fd.close()
             fd = open(self.log_network, 'w+')
-            log_writer = csv.writer(fd)  
+            log_writer = csv.writer(fd)
             title_list = list()
             title_list.append('time')
             for i in range(CLUSTER.num_node):
@@ -78,13 +78,13 @@ class _Log(object):
             fd.close()
 
             fd = open(self.log_mem, 'w+')
-            log_writer = csv.writer(fd)  
+            log_writer = csv.writer(fd)
             # log_writer.writerow(['time'] + ['mem'+str(i) for i in range(CLUSTER.num_node)])
             log_writer.writerow(['time', 'max', '99th', '95th', 'med'])
             fd.close()
-            
+
         fd = open(self.log_job, 'w+')
-        log_writer = csv.writer(fd)  
+        log_writer = csv.writer(fd)
         if FLAGS.schedule == 'gpu-demands':
             log_writer.writerow(['time', '1-GPU', '2-GPU', '4-GPU', '8-GPU', '12-GPU', '16-GPU', '24-GPU', '32-GPU'])
         else:
@@ -97,7 +97,7 @@ class _Log(object):
 
     def dump_all_logs(self):
         fd = open(self.log_file, 'a+')
-        log_writer = csv.writer(fd)  
+        log_writer = csv.writer(fd)
         for log in self.log_list:
             log_writer.writerow(log)
         fd.close()
@@ -105,28 +105,28 @@ class _Log(object):
 
         if FLAGS.scheme != 'count':
             fd = open(self.log_cpu, 'a+')
-            log_writer = csv.writer(fd)  
+            log_writer = csv.writer(fd)
             for log in self.cpu_list:
                 log_writer.writerow(log)
             fd.close()
             del self.cpu_list[:]
 
             fd = open(self.log_gpu, 'a+')
-            log_writer = csv.writer(fd)  
+            log_writer = csv.writer(fd)
             for log in self.gpu_list:
                 log_writer.writerow(log)
             fd.close()
             del self.gpu_list[:]
 
             fd = open(self.log_network, 'a+')
-            log_writer = csv.writer(fd)  
+            log_writer = csv.writer(fd)
             for log in self.network_list:
                 log_writer.writerow(log)
             fd.close()
             del self.network_list[:]
 
             fd = open(self.log_mem, 'a+')
-            log_writer = csv.writer(fd)  
+            log_writer = csv.writer(fd)
             for log in self.mem_list:
                 log_writer.writerow(log)
             fd.close()
@@ -141,7 +141,7 @@ class _Log(object):
         if len(self.log_list) >= 1:
             self.dump_all_logs()
 
-    def checkpoint(self, event_time):
+    def checkpoint(self, job_queue, event_time):
         '''
         Record cluster, and job information, including:
         time
@@ -189,7 +189,7 @@ class _Log(object):
                     #     full_node += 1
 
 
-                    # #cpu 
+                    # #cpu
                     # free_cpu = node.check_free_cpus()
                     # busy_cpu = node.num_cpu - free_cpu
                     # b_gpu = node.num_gpu - free_gpu
@@ -244,7 +244,7 @@ class _Log(object):
             full_node = busy_node
             idle_node = int(CLUSTER.num_node - busy_node)
 
-        for job in JOBS.job_list:
+        for job in job_queue.job_list:
             if job['status'] == 'RUNNING':
                 running_job += 1
             elif job['status'] == 'PENDING':
@@ -316,7 +316,7 @@ class _Log(object):
 
     def dump_job_logs(self):
         fd = open(self.log_job, 'a+')
-        log_writer = csv.writer(fd)  
+        log_writer = csv.writer(fd)
         for log in self.job_list:
             log_writer.writerow(log)
         fd.close()
@@ -339,7 +339,7 @@ class _Log(object):
             self.dump_job_logs()
 
     def checkpoint_gpu_demands(self, event_time):
-        '''        
+        '''
         1-GPU, 2-GPU, 4-GPU, 8-GPU, 12-GPU, 16-GPU, 24-GPU, 32-GPU
         '''
         log_list = [event_time]

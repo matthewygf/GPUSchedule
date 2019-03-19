@@ -1,6 +1,7 @@
-import util
-import lp
-import flags
+from core import util
+from core import lp
+from core import flags
+
 FLAGS = flags.FLAGS
 
 def fit_first_sim_jobs(job_queue, cluster, logger):
@@ -36,7 +37,7 @@ def fit_first_sim_jobs(job_queue, cluster, logger):
             # ret = CLUSTER.alloc_gpus(p_job)
             if cluster.check_free_gpu() <= 0:
                 break
-            ret = try_get_job_res(cluster, p_job)
+            ret = try_get_job_res(cluster, job_queue, p_job)
             if ret == True:
                 ''' if remove_from_pending, then will miss the next p_job in the list '''
                 new_start_list.append(p_job)
@@ -58,18 +59,18 @@ def fit_first_sim_jobs(job_queue, cluster, logger):
         job_queue.job_events.pop(0)
         job_queue.job_events.sort(key = lambda e:e.__getitem__('time'))
 
-        logger.checkpoint(event_time)
+        logger.checkpoint(job_queue, event_time)
 
 
 '''
 Allocate job resource
 '''
-def try_get_job_res(cluster, job):
+def try_get_job_res(cluster, job_queue, job):
     '''
     select placement scheme
     '''
     if FLAGS.scheme == 'yarn':
-        ret = cluster.ms_yarn_placement(job)
+        ret = cluster.ms_yarn_placement(job_queue, job)
     elif FLAGS.scheme == 'balance':
         ret = lp.placement(job)
     elif FLAGS.scheme == 'random':

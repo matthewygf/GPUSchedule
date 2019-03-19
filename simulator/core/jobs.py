@@ -34,7 +34,7 @@ class _TFJobs(object):
     '''
     class g_job(object):
         def __init__(self, num_gpu, total_gpu=0):
-            self.num_gpu = num_gpu       
+            self.num_gpu = num_gpu
             self.name = str(num_gpu) + '-GPU'
             self.total_job = 0
             self.end_job = 0
@@ -81,7 +81,7 @@ class _TFJobs(object):
             return int(len(self.runnable_jobs) * self.num_gpu)
 
     def __init__(self, flags):
-        self.num_job = 0        
+        self.num_job = 0
         self.job_list = list()
         ''' job events is a list of tuple
             (time, dict)
@@ -90,7 +90,7 @@ class _TFJobs(object):
             'end_jobs': [xxx,xxx,xxx]
         '''
         self.flags = flags
-        self.job_events = list()        
+        self.job_events = list()
         #holding pending jobs, add job_idx
         self.pending_jobs = list() # [{job_dict}, {job_dict}]
         self.runnable_jobs = list() # pending + running
@@ -128,12 +128,12 @@ class _TFJobs(object):
     def get_network_load(self, job_dict):
         if 'num_gpu' not in job_dict:
             util.print_fn('No gpu information')
-            return 
+            return
 
         if 'model' not in job_dict:
             util.print_fn('No model information')
             return
-        
+
         num_w = job_dict['num_gpu']
         num_ps = num_w
 
@@ -143,7 +143,7 @@ class _TFJobs(object):
             job_dict['w_network'] = list([0])
 
             '''
-            check job ps_size 
+            check job ps_size
             '''
             job_dict['ps_ave'] = 0
             return
@@ -159,13 +159,13 @@ class _TFJobs(object):
             job_dict['ps_network'][i] = round(job_dict['ps_network'][i], 1)
 
         '''
-        check the PS job size information  
+        check the PS job size information
         job_dict['ps_ave'] = round(numpy.mean(job_dict['ps_network']), 1)
         if job_dict['ps_ave'] == 0:
             print(job_dict)
 
-        s_ps_list = sorted(job_dict['ps_network'], reverse=True) 
-        job_dict['ps_max'] = s_ps_list[0] 
+        s_ps_list = sorted(job_dict['ps_network'], reverse=True)
+        job_dict['ps_max'] = s_ps_list[0]
         max99_idx = int(math.ceil(num_ps * 0.01))
         job_dict['ps_max99th'] = s_ps_list[max99_idx]
         job_dict['ps_max_ave'] = round(job_dict['ps_max'] / job_dict['ps_ave'], 1)
@@ -184,7 +184,7 @@ class _TFJobs(object):
         job_dict['duration'] = int(float(job_dict['duration']))
         # job_dict['duration'] = int(job_dict['duration'])
 
-        job_dict['rank'] = sys.maxint
+        job_dict['rank'] = sys.maxsize
 
 
         if 'start_time' not in job_dict:
@@ -197,7 +197,7 @@ class _TFJobs(object):
         if 'submit_time' in job_dict:
             job_dict['r_submit_time'] = int(-1 * job_dict['submit_time'])
 
-        job_dict['start_time'] = sys.maxint
+        job_dict['start_time'] = sys.maxsize
         job_dict['end_time'] = 0
         job_dict['pending_time'] = 0
 
@@ -220,7 +220,7 @@ class _TFJobs(object):
         # job_dict['sleep'] = int(job_dict['sleep'])
 
         job_dict['gpus'] = list()
-        job_dict['placements'] = list() #prepare an empty job_placement 
+        job_dict['placements'] = list() #prepare an empty job_placement
         job_dict['ps_placements'] = list()
         job_dict['w_placements'] = list()
         '''
@@ -236,7 +236,7 @@ class _TFJobs(object):
         #     job_dict['duration'] = job_dict['end_time'] - job_dict['start_time']
         # else:
         #     job_dict['end_time'] = job_dict['start_time'] + job_dict['duration']
-        
+
         if 'model_scale' not in job_dict:
             job_dict['model_scale'] = 1
         #get detailed model inforamtion
@@ -257,28 +257,28 @@ class _TFJobs(object):
 
 
     def print_all_job_size_info(self):
-        '''        
+        '''
         print job tensor info
         '''
 
         ps_max_ave_fd = open('ps_max_ave.csv', 'w+')
-        ps_max_ave_writer = csv.writer(ps_max_ave_fd)  
+        ps_max_ave_writer = csv.writer(ps_max_ave_fd)
         ps_max_ave_writer.writerow(['ps_max_ave'])
 
         ps_max99_ave_fd = open('ps_max99_ave.csv', 'w+')
-        ps_max99_ave_writer = csv.writer(ps_max99_ave_fd)  
+        ps_max99_ave_writer = csv.writer(ps_max99_ave_fd)
         ps_max99_ave_writer.writerow(['ps_max99_ave'])
 
         w_fd = open('w.csv', 'w+')
-        w_writer = csv.writer(w_fd)  
+        w_writer = csv.writer(w_fd)
         w_writer.writerow(['w'])
 
         ps_fd = open('ps.csv', 'w+')
-        ps_writer = csv.writer(ps_fd)  
+        ps_writer = csv.writer(ps_fd)
         ps_writer.writerow(['ps'])
 
         ps_w_fd = open('ps_w.csv', 'w+')
-        ps_w_writer = csv.writer(ps_w_fd)  
+        ps_w_writer = csv.writer(ps_w_fd)
         ps_w_writer.writerow(['ps_w'])
 
         util.print_fn("Start to dump job information")
@@ -291,16 +291,16 @@ class _TFJobs(object):
                 # for ps in job['ps_network']:
                 #     ps_writer.writerow(ps)
                 #     ps_w_writer.writerow(ps)
-                
-                
 
-                
+
+
+
         ps_max_ave_fd.close()
         ps_max99_ave_fd.close()
         w_fd.close()
         ps_fd.close()
         ps_w_fd.close()
-        
+
 
 
 
@@ -352,7 +352,7 @@ class _TFJobs(object):
                 util.print_fn('%d-GPU jobs have %d ' % (num_gpu, gjob.total_job))
 
     def create_multi_nodes_placement(self, job, switch_id, node_list):
-        tmp_dict = dict() 
+        tmp_dict = dict()
         tmp_dict['switch'] = switch_id
         tmp_dict['nodes'] = node_list
         job['placements'].append(tmp_dict)
@@ -364,7 +364,7 @@ class _TFJobs(object):
         under this switch, there is only one need used
         {'switch': xx, 'nodes': [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w0, w1, ps1]}]}
         '''
-        tmp_dict = dict() 
+        tmp_dict = dict()
         tmp_dict['switch'] = switch_id
         node_dict = dict()
         node_dict['id'] = node_id
@@ -431,7 +431,7 @@ class _TFJobs(object):
         ''' job gets into the system: pending or running, and finally END'''
         #job not started yet
         job['status'] = 'PENDING'
-        job['start_time'] = sys.maxint
+        job['start_time'] = sys.maxsize
         job['last_start_time'] = 0
         job['last_check_time'] = job['submit_time']
         job['total_executed_time'] = 0 # total
@@ -444,7 +444,7 @@ class _TFJobs(object):
             self.gpu_job[num_gpu].runnable_jobs.append(job)
         else:
             self.runnable_jobs.append(job)
-    
+
     def update_priority_queues(self, gputime=False):
         for queue in self.queues:
             del queue[:]
@@ -471,17 +471,17 @@ class _TFJobs(object):
             #     self.queues[3].append(job)
             #     job['q_id'] = 3
 
-   
+
     def print_job_events(self):
         util.print_fn('    Print all job events ')
         for event in self.job_events:
-            util.print_fn('      event.time[%d], with %d start_jobs, and %d end_jobs' % 
+            util.print_fn('      event.time[%d], with %d start_jobs, and %d end_jobs' %
                             (event['time'], len(event['start_jobs']), len(event['end_jobs'])))
 
         util.print_fn(' ')
 
     def add_job_end_event(self, job):
-        #for job end 
+        #for job end
         tmp_dict = util.search_dict_list(self.job_events, 'time', job['end_time'])
         if tmp_dict == None:
             #not found, add the time into to job_events
@@ -532,7 +532,7 @@ class _TFJobs(object):
 
     def add_migratable(self, job):
         '''
-        add job into migratable job list 
+        add job into migratable job list
         1. distributed jobs
         2. running jobs
         3. ?
@@ -543,7 +543,7 @@ class _TFJobs(object):
         #if job is distributed ?
 
         if job not in self.migratable_jobs:
-            self.migratable_jobs.append(job)            
+            self.migratable_jobs.append(job)
 
 
     def remove_migratable(self, job):
@@ -575,13 +575,13 @@ class _TFJobs(object):
         if self.flags.schedule != 'multi-dlas-gpu':
             util.print_fn("Not multi-dlas-gpu")
             exit()
-        
+
         num_gpu = e_job['num_gpu']
         gjob = self.gpu_job[num_gpu]
         gjob.release_job_gpu(1)
         gjob.runnable_jobs.remove(e_job)
         # gjob.running_jobs.remove(e_job)
-        gjob.queues[e_job['q_id']].remove(e_job)       
+        gjob.queues[e_job['q_id']].remove(e_job)
         gjob.end_job += 1
 
 
@@ -609,12 +609,12 @@ class _TFJobs(object):
             tmp_dict['reserve'] = 0
             job_list.append(tmp_dict)
 
-        total_free_gpu = total_num - sum(k['used_gpu'] for k in job_list) 
+        total_free_gpu = total_num - sum(k['used_gpu'] for k in job_list)
         total_demands = sum(k['demands'] for k in job_list)
         # print('total_free %d, total_demands %d' % (total_free_gpu, total_demands))
-        if total_demands == 0: 
+        if total_demands == 0:
             return
-        
+
         '''demand-based, keep current used_gpu'''
         remain_free_gpu = total_free_gpu
         job_list.sort(key = lambda e:e.__getitem__('demands'))
@@ -651,13 +651,13 @@ class _TFJobs(object):
                 if job_dict['demands'] <= job_dict['reserve']:
                     num_full += 1
                     continue
-                if remain_free_gpu >= job_dict['num_gpu']:                
+                if remain_free_gpu >= job_dict['num_gpu']:
                     remain_free_gpu -= job_dict['num_gpu']
                     job_dict['reserve'] += job_dict['num_gpu']
                 else:
                     num_full += 1
 
-                if remain_free_gpu <= 0: 
+                if remain_free_gpu <= 0:
                     break
 
         #execute reservation
@@ -686,10 +686,10 @@ class _TFJobs(object):
             gjob.runnable_jobs = []
 
         self.gpu_job[8].total_gpu = 32
-        self.gpu_job[8].free_gpu = 0 
+        self.gpu_job[8].free_gpu = 0
         self.gpu_job[8].runnable_jobs.extend([4,5,6,7,8])
 
-        self.gpu_job[16].total_gpu = 32 
+        self.gpu_job[16].total_gpu = 32
         self.gpu_job[16].free_gpu = 16
         self.gpu_job[16].runnable_jobs.extend([5,6,7,8,9])
 

@@ -21,9 +21,9 @@ for setup in ${setups[@]};do
         for p in ${placement[@]};do
             for s in ${schedule[@]};do
                 log_name="${log_folder}/${s}-${p}"
-                cmd="python run_sim.py --cluster_spec=${cluster_spec} --scheme=${p} --trace_file=${job_file} --schedule=${s} --log_path=${log_name}"
+                cmd="python3 run_sim.py --cluster_spec=${cluster_spec} --scheme=${p} --trace_file=${job_file} --schedule=${s} --log_path=${log_name}"
                 echo ${cmd} 
-                python run_sim.py --cluster_spec=${cluster_spec} --scheme=${p} --trace_file=${job_file} --schedule=${s} --log_path=${log_name}
+                python3 run_sim.py --cluster_spec=${cluster_spec} --scheme=${p} --trace_file=${job_file} --schedule=${s} --log_path=${log_name}
             done
         done
     done
