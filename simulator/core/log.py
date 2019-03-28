@@ -132,11 +132,11 @@ class _Log(object):
             fd.close()
             del self.mem_list[:]
 
-    def gandiva_checkpoint(self, event_time, idle_node, busy_gpu, frag_gpu, pending_job, running_job, len_g1, len_g2, len_g4, len_g8, len_g16, len_g32, len_g64):
+    def gandiva_checkpoint(self, job_queue, event_time, idle_node, busy_gpu, frag_gpu, pending_job, running_job, len_g1, len_g2, len_g4, len_g8, len_g16, len_g32, len_g64):
         busy_node = CLUSTER.num_node - idle_node
         full_node = 0
         idle_gpu = frag_gpu
-        completed_job = len(JOBS.completed_jobs)
+        completed_job = len(job_queue.completed_jobs)
         self.log_list.append([event_time, idle_node, busy_node, full_node, idle_gpu, busy_gpu, pending_job, running_job, completed_job, len_g1, len_g2, len_g4, len_g8, len_g16, len_g32, len_g64])
         if len(self.log_list) >= 1:
             self.dump_all_logs()
@@ -266,7 +266,7 @@ class _Log(object):
 
 
 
-    def checkpoint_multi_dlas_gpu(self, event_time):
+    def checkpoint_multi_dlas_gpu(self, job_queue, event_time):
         '''
         Record cluster, and job information, including:
         time
@@ -292,7 +292,7 @@ class _Log(object):
             util.print_fn("Error, not multi-dlas-gpu in checkpoint")
             exit()
 
-        for num_gpu, gjob in JOBS.gpu_job.items():
+        for num_gpu, gjob in job_queue.gpu_job.items():
             idle_gpu += gjob.free_gpu
 
         busy_gpu = CLUSTER.num_gpu - idle_gpu
@@ -301,7 +301,7 @@ class _Log(object):
         full_node = busy_node
         idle_node = int(CLUSTER.num_node - busy_node)
 
-        for job in JOBS.job_list:
+        for job in job_queue.job_list:
             if job['status'] == 'RUNNING':
                 running_job += 1
             elif job['status'] == 'PENDING':
@@ -338,7 +338,7 @@ class _Log(object):
         if len(self.job_list) >= 1:
             self.dump_job_logs()
 
-    def checkpoint_gpu_demands(self, event_time):
+    def checkpoint_gpu_demands(self, job_queue, event_time):
         '''
         1-GPU, 2-GPU, 4-GPU, 8-GPU, 12-GPU, 16-GPU, 24-GPU, 32-GPU
         '''
@@ -346,8 +346,8 @@ class _Log(object):
         gpu_list = [1,2,4,8,12,16,24,32]
         for num_gpu in gpu_list:
             total_gpu_job = 0
-            if num_gpu in JOBS.gpu_job:
-                total_gpu_job = num_gpu * JOBS.gpu_job[num_gpu]
+            if num_gpu in job_queue.gpu_job:
+                total_gpu_job = num_gpu * job_queue.gpu_job[num_gpu]
 
             log_list.append(total_gpu_job)
 

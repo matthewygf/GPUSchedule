@@ -26,7 +26,7 @@ import datetime
 # import placement_scheme as scheme
 # import cmd
 
-#parse input arguments
+# parse input arguments
 flags.DEFINE_string('trace_file', 'tf_job.csv',
                 '''Provide TF job trace file (*.csv, *.txt).
                     *.csv file, use \',\' as delimiter; *.txt file, user \' \' as deliminter.
@@ -64,10 +64,13 @@ flags.DEFINE_string('schedule', 'fifo',
 #                         2.none: all jobs have the same placement (e.g. every ps0 on Node1)
 #                         3.half_random: for each job, still one ps/worker per machine, placements are random
 #                     Default scheme is random ''')
-flags.DEFINE_integer('num_switch', 1,
-                '''Part of cluster spec: the number of switches in this cluster, default is 1''')
+flags.DEFINE_integer('num_switch', 1, '''Part of cluster spec: the number of switches in this cluster, default is 1''')
+
 flags.DEFINE_integer('num_node_p_switch', 32,
-                '''Part of cluster spec: the number of nodes under a single switch, default is 32''')
+                     '''Part of cluster spec: the number of nodes under a single switch, default is 32''')
+
+flags.DEFINE_integer('rack_bandwidth', 100000, '''Bandwidth per rack in Mbps''')
+
 flags.DEFINE_integer('num_gpu_p_node', 8,
                 '''Part of cluster spec: the number of gpus on each node, default is 8''')
 flags.DEFINE_integer('num_cpu_p_node', 64,
@@ -93,23 +96,25 @@ FLAGS = flags.FLAGS
 #get host info
 CLUSTER = cluster.CLUSTER
 
+
 def parse_job_file(trace_file):
-    #check trace_file is *.csv
+    # Check trace_file is *.csv
+
     fd = open(trace_file, 'r')
     deli = ','
-    if ((trace_file.find('.csv') == (len(trace_file) - 4))):
+    if trace_file.find('.csv') == (len(trace_file) - 4):
         deli = ','
-    elif ((trace_file.find('.txt') == (len(trace_file) - 4))):
+    elif trace_file.find('.txt') == (len(trace_file) - 4):
         deli = ' '
 
-    reader = csv.DictReader(fd, delimiter = deli)
+    reader = csv.DictReader(fd, delimiter=deli)
     ''' Add job from job trace file'''
     keys = reader.fieldnames
     util.print_fn('--------------------------------- Read TF jobs from: %s ---------------------------------' % trace_file)
     util.print_fn('    we get the following fields:\n        %s' % keys)
     job_idx = 0
     for row in reader:
-        #add job into JOBS
+        # Add job into JOBS
         JOBS.add_job(row)
         # JOBS.read_job_info(job_idx, 'num_gpu')
         job_idx += 1
@@ -128,12 +133,15 @@ def parse_cluster_spec():
         print(FLAGS.cluster_spec)
         spec_file = FLAGS.cluster_spec
         fd = open(spec_file, 'r')
+
         deli = ','
-        if ((spec_file.find('.csv') == (len(spec_file) - 4))):
+        if spec_file.find('.csv') == (len(spec_file) - 4):
             deli = ','
-        elif ((spec_file.find('.txt') == (len(spec_file) - 4))):
+        elif spec_file.find('.txt') == (len(spec_file) - 4):
             deli = ' '
-        reader = csv.DictReader(fd, delimiter = deli)
+
+        reader = csv.DictReader(fd, delimiter=deli)
+
         keys = reader.fieldnames
         util.print_fn(keys)
         if 'num_switch' not in keys:
@@ -241,7 +249,7 @@ def one_queue_fifo_sim_jobs():
     run jobs in fifo order;
     new jobs are added to the end of the pending queue
     '''
-    while (len(JOBS.job_events) + len(JOBS.pending_jobs))> 0:
+    while (len(JOBS.job_events) + len(JOBS.pending_jobs)) > 0:
         if len(JOBS.job_events) == 0:
             util.print_fn("This cluster is not large enough to run the job")
             break
@@ -299,7 +307,7 @@ def one_queue_fifo_sim_jobs():
         JOBS.job_events.sort(key = lambda e:e.__getitem__('time'))
         # JOBS.print_job_events()
 
-        LOG.checkpoint(event_time)
+        LOG.checkpoint(JOBS, event_time)
 
 # def smallest_first_sim_jobs():
 #     '''
@@ -483,7 +491,7 @@ def smallest_first_sim_jobs(gputime=False):
         end_events.sort(key = lambda e:e.__getitem__('time'))
 
 
-        LOG.checkpoint(event_time)
+        LOG.checkpoint(JOBS, event_time)
 
 def cal_shortest_expected_remaining(job_data, a):
     data = job_data['data']
@@ -502,12 +510,12 @@ def shortest_first_sim_jobs(gputime=False):
     but in the queue, shortest (gpu) job first be served, until no resource
     '''
     end_events = list()
-    while (len(JOBS.job_events) + len(JOBS.runnable_jobs))> 0:
+    while (len(JOBS.job_events) + len(JOBS.runnable_jobs)) > 0:
         if (len(JOBS.job_events) + len(end_events)) == 0:
             util.print_fn("This cluster is not large enough to run the job")
             break
 
-        #decide which is the next event: start or end  ?
+        # decide which is the next event: start or end  ?
         start_time = sys.maxsize
         if len(JOBS.job_events) > 0:
             start_event = JOBS.job_events[0]
@@ -531,20 +539,20 @@ def shortest_first_sim_jobs(gputime=False):
 
         assert event_time == event['time']
 
-        #for ending jobs, release gpu
+        # for ending jobs, release gpu
         if 'end_jobs' in event:
             for e_job in event['end_jobs']:
-                #job completes
+                # job completes
                 CLUSTER.release_job_res(e_job)
                 # CLUSTER.release_gpus(e_job)
                 LOG.job_complete(e_job, event_time)
                 JOBS.runnable_jobs.remove(e_job)
 
 
-        #for new-start jobs, add to runnable
+        # for new-start jobs, add to runnable
         if 'start_jobs' in event:
             for s_job in event['start_jobs']:
-                #add into runnable list with pending status
+                # add into runnable list with pending status
                 JOBS.move_to_runnable(s_job)
                 if FLAGS.schedule == 'shortest-expected':
                     s_job['remaining_expected'] = cal_shortest_expected_remaining(JOBS.job_dist_data, 0)
@@ -628,7 +636,7 @@ def shortest_first_sim_jobs(gputime=False):
         end_events.sort(key = lambda e:e.__getitem__('time'))
 
 
-        LOG.checkpoint(event_time)
+        LOG.checkpoint(JOBS, event_time)
 
 
 
@@ -1146,7 +1154,7 @@ def dlas_sim_jobs(gputime=False, solve_starvation=0):
 
 
 
-        LOG.checkpoint(event_time)
+        LOG.checkpoint(JOBS, event_time)
 
 def get_gittins_index(a):
     job_info = JOBS.job_dist_data
@@ -2003,6 +2011,7 @@ def main():
         sim_gpu_demands()
     else:
         one_queue_fifo_sim_jobs()
+
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)  # pylint: disable=line-too-long

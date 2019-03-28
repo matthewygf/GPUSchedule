@@ -4,7 +4,6 @@ from __future__ import print_function
 import math
 import random
 from infra.switch import _Switch
-from infra.node import _Node
 from core import util
 from core import flags
 # import jobs
@@ -177,7 +176,7 @@ class _Cluster(object):
         num_gpu = job['num_gpu']
         node_list = None
         if num_gpu not in self.node_g:
-            print_fn("error: job[%d] needs %d GPUs" % (job['job_idx'], num_gpu))
+            util.print_fn("error: job[%d] needs %d GPUs" % (job['job_idx'], num_gpu))
             exit()
         node_list = self.node_g[num_gpu]
         # if num_gpu == 1:

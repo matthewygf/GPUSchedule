@@ -57,7 +57,7 @@ def fit_first_sim_jobs(job_queue, cluster, logger):
 
         #remove time_event
         job_queue.job_events.pop(0)
-        job_queue.job_events.sort(key = lambda e:e.__getitem__('time'))
+        job_queue.job_events.sort(key=lambda e:e.__getitem__('time'))
 
         logger.checkpoint(job_queue, event_time)
 

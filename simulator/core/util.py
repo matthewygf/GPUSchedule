@@ -4,8 +4,20 @@ import subprocess
 import os
 import logging
 
-def print_fn(log):
+LOG_LEVEL_INFO = 0
+LOG_LEVEL_WARNING = 1
+LOG_LEVEL_ERROR = 2
+
+
+def print_fn(log, level=0):
+    if level == LOG_LEVEL_INFO:
         logging.info(log)
+    elif level == LOG_LEVEL_WARNING:
+        logging.warning(log)
+    elif level == LOG_LEVEL_ERROR:
+        logging.error(log)
+        exit()
+
 
 def make_dir_if_not_exist(local_path):
     if not os.path.exists(local_path):
