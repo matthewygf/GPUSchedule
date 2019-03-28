@@ -1820,22 +1820,22 @@ def parse_job_dist():
 
     return job_dict
 
-def main():
+def main(job_queue_manager, log_manager):
 
     if FLAGS.schedule == 'multi-dlas-gpu':
         if FLAGS.scheme != 'count':
             util.print_fn("In Main, multi-dlas-gpu without count")
             exit()
     ''' Parse input'''
-    jobs = parse_job_file(FLAGS.trace_file)
+    #TODO: parse cluster into our new infra class
     parse_cluster_spec()
 
     ''' prepare logging '''
-    LOG.init_log()
+    # LOG.init_log()
 
     # lp.placement(JOBS.job_list[0])
     ''' Prepare jobs'''
-    JOBS.prepare_job_start_events()
+    # JOBS.prepare_job_start_events()
 
     # # sim_job_events()
     # if FLAGS.schedule == 'fifo':
@@ -1925,6 +1925,6 @@ if __name__ == '__main__':
     trace_path = os.path.join(project_dir, FLAGS.trace_file)
     jq_manager = jq.JobQueueManager(FLAGS, trace_path)
     log_manager = lm.LogManager(output_dir, FLAGS)
-    main()
+    main(jq_manager, log_manager)
 
     logging.getLogger().removeHandler(filehandler)
