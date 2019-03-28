@@ -28,7 +28,7 @@ var maxt;
 
 minimize z: maxt;
 
-s.t. optcon{n in N}: ct[n] + sum{j in J} (p[j, n] * t[j]) <= maxt; 
+s.t. optcon{n in N}: ct[n] + sum{j in J} (p[j, n] * t[j]) <= maxt;
 /* optimization constraint: min(max{network load}) */
 
 s.t. fgcap{n in N}: sum{j in J} (p[j,n] * g[j]) <= fg[n];
@@ -54,11 +54,12 @@ from cplex.exceptions import CplexError
 from cplex.six.moves import range
 '''
 
-import util
-import flags 
-import cluster
-import switch
-import node
+from core import util
+from core import flags
+
+from infra import cluster
+from infra import switch
+from infra import node
 FLAGS = flags.FLAGS
 CLUSTER = cluster.CLUSTER
 '''
@@ -125,9 +126,9 @@ def prepare_job_info(new_job):
     # for i in range(num_ps):
     #     tmp_cc.append(list([new_job['ps_network'][i]] * num_w))
 
-    # ret_dict['g'] = tmp_g  
-    # ret_dict['c'] = tmp_c  
-    ret_dict['t'] = tmp_n  
+    # ret_dict['g'] = tmp_g
+    # ret_dict['c'] = tmp_c
+    ret_dict['t'] = tmp_n
     # ret_dict['cc'] = tmp_cc
     ret_dict['num_ps'] = num_ps
     ret_dict['num_w'] = num_w
@@ -173,7 +174,7 @@ def parse_lp_solution(new_job, result, job_dict, cluster_dict, var_ind):
     # cc = job_dict['cc']
     # num_c = len(job_dict['t'])
     # assert num_c == (num_ps + num_w)
-    num_n = len(cluster_dict['fc']) 
+    num_n = len(cluster_dict['fc'])
     ct = cluster_dict['ct']
 
     ps_p = var_ind['ps_p']
@@ -186,7 +187,7 @@ def parse_lp_solution(new_job, result, job_dict, cluster_dict, var_ind):
         num_cpu = 0
         network = 0
         add_network_load = 0
-        
+
         tmp_nw = result[nw[n_idx]]
         num_cpu += int(tmp_nw * w_c)
         num_gpu += tmp_nw
@@ -202,7 +203,7 @@ def parse_lp_solution(new_job, result, job_dict, cluster_dict, var_ind):
 
                 tmp_ps_load += round(t[ps_idx] * (num_w - 2 * tmp_nw), 1)
                 num_cpu += ps_c
-        
+
         add_network_load += tmp_ps_load
         add_network_load = round(add_network_load, 1)
         num_gpu = int(num_gpu)
@@ -211,7 +212,7 @@ def parse_lp_solution(new_job, result, job_dict, cluster_dict, var_ind):
         #     print("node[%d] add traffic: %.1f" % (n_idx, add_network_load))
         #     network = round(ct[n_idx] + add_network_load, 1)
         #     print("node[%d] total traffic: %.1f" % (n_idx, network))
-                
+
         if num_cpu != 0:
             switch_id = int(n_idx / CLUSTER.num_node_p_switch)
             node_id = int(n_idx % CLUSTER.num_node_p_switch)
@@ -221,7 +222,7 @@ def parse_lp_solution(new_job, result, job_dict, cluster_dict, var_ind):
             node.alloc_job_res(num_gpu, num_cpu)
             node.add_network_load(add_network_load, add_network_load)
             #create placement
-            tmp_dict = dict() 
+            tmp_dict = dict()
             tmp_dict['switch'] = switch_id
             node_dict = dict()
             node_dict['id'] = node_id

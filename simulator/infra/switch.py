@@ -4,7 +4,7 @@ from __future__ import print_function
 
 
 from infra.node import _Node
-from core import flags 
+from core import flags
 from core import util
 from core import jobs
 import math
@@ -28,7 +28,7 @@ class _Switch(object):
             self.num_gpu_p_node = num_gpu_p_node
             self.num_cpu_p_node = num_cpu_p_node
             self.mem_p_node = mem_p_node
-        
+
         for n in range(0, self.num_node):
             tmp_n = _Node(n, self.num_gpu_p_node, self.num_cpu_p_node, self.mem_p_node)
             self.node_list.append(tmp_n)
@@ -39,9 +39,9 @@ class _Switch(object):
         '''
         alloc gpus to job
         '''
-        pass 
+        pass
 
-    def try_cross_node_alloc(self, job):
+    def try_cross_node_alloc(self, job_queue, job):
         '''
         used in MS_YARN placement
         try get gpus from multiple nodes
@@ -57,8 +57,8 @@ class _Switch(object):
 
         model_size = job['model']['total_size']
 
-        ps_mem = JOBS.ps_mem + need_gpu * JOBS.p_w_mem
-        ps_w_mem = ps_mem + JOBS.worker_mem 
+        ps_mem = job_queue.ps_mem + need_gpu * job_queue.p_w_mem
+        ps_w_mem = ps_mem + job_queue.worker_mem
 
         full_node_list = list()
         for node in self.node_list:
@@ -69,10 +69,10 @@ class _Switch(object):
                     #enough full nodes
                     break
         if len(full_node_list) < num_full_nodes:
-            return False 
+            return False
 
         if last_node_gpu != 0:
-            for node in self.node_list: 
+            for node in self.node_list:
                 if node not in full_node_list:
                     if node.check_free_gpus() >= last_node_gpu and node.check_free_cpus() >= last_node_cpu and node.free_mem >= (ps_w_mem * last_node_gpu):
                         #get last node
@@ -86,7 +86,7 @@ class _Switch(object):
         node_list = list()
         idx = 0
         for node in full_node_list:
-            node.alloc_job_res(node.num_gpu, idle_node_cpu)  
+            node.alloc_job_res(node.num_gpu, idle_node_cpu)
             node.free_mem -= ps_w_mem * node.num_gpu
             node_dict = dict()
             node_dict['id'] = node.id
@@ -118,7 +118,7 @@ class _Switch(object):
 
         if last_node_gpu != 0:
             last_node.alloc_job_res(last_node_gpu, last_node_cpu)
-            last_node.free_mem -= ps_w_mem * last_node_gpu 
+            last_node.free_mem -= ps_w_mem * last_node_gpu
             node_dict = dict()
             node_dict['id'] = last_node.id
             node_dict['num_gpu'] = last_node_gpu
@@ -141,11 +141,11 @@ class _Switch(object):
             node_dict['tasks'] = list()
             node_list.append(node_dict)
 
-        JOBS.create_multi_nodes_placement(job, self.id, node_list)
+        job_queue.create_multi_nodes_placement(job, self.id, node_list)
         return True
 
 
-    def try_single_node_alloc(self, job):
+    def try_single_node_alloc(self, job_queue, job):
         '''
         used in MS_YARN placement
         try get gpus from a single node
@@ -158,12 +158,12 @@ class _Switch(object):
             need_cpu = int(need_gpu * 6) # worker:2, ps:4
 
         for node in self.node_list:
-            if (node.check_free_gpus() >= need_gpu) and (node.check_free_cpus() >= need_cpu) and (node.free_mem >= JOBS.worker_mem):
+            if (node.check_free_gpus() >= need_gpu) and (node.check_free_cpus() >= need_cpu) and (node.free_mem >= job_queue.worker_mem):
                 # if node.alloc_gpus(need_gpu) == False:
                 if node.alloc_job_res(need_gpu, need_cpu) == False:
                     continue
-                node.free_mem = node.free_mem - JOBS.worker_mem
-                traffic = JOBS.create_single_node_placement(job, self.id, node.id, need_gpu, need_cpu, JOBS.worker_mem)
+                node.free_mem = node.free_mem - job_queue.worker_mem
+                traffic = job_queue.create_single_node_placement(job, self.id, node.id, need_gpu, need_cpu, job_queue.worker_mem)
                 # node.add_network_load(traffic, traffic)
 
                 return True
@@ -173,9 +173,9 @@ class _Switch(object):
         return False
 
 
-    def ms_yarn_alloc_gpus(self, job):
+    def ms_yarn_alloc_gpus(self, job_queue, job):
         '''
-        ms_yarn allocates gpus from a single switch, 
+        ms_yarn allocates gpus from a single switch,
         if no enough gpus, give up, return False (all-or-nothing)
 
         if need_gpu > gpu_p_node
@@ -186,15 +186,15 @@ class _Switch(object):
         need_gpu = job['num_gpu']
         ret = False
         if need_gpu > self.num_gpu_p_node:
-            ret = self.try_cross_node_alloc(job)
+            ret = self.try_cross_node_alloc(job_queue, job)
         else:
-            ret = self.try_single_node_alloc(job)
+            ret = self.try_single_node_alloc(job_queue, job)
 
         return ret
 
-    def ms_yarn_alloc_res(self, job):
+    def ms_yarn_alloc_res(self, job_queue, job):
         '''
-        ms_yarn allocates res from a single switch, 
+        ms_yarn allocates res from a single switch,
         if no enough gpus, give up, return False (all-or-nothing)
 
         if need_gpu > gpu_p_node
@@ -205,9 +205,9 @@ class _Switch(object):
         need_gpu = job['num_gpu']
         ret = False
         if need_gpu > self.num_gpu_p_node:
-            ret = self.try_cross_node_alloc(job)
+            ret = self.try_cross_node_alloc(job_queue, job)
         else:
-            ret = self.try_single_node_alloc(job)
+            ret = self.try_single_node_alloc(job_queue, job)
 
         return ret
 
@@ -231,7 +231,7 @@ class _Switch(object):
         '''
         release job resources from nodes
         nodes:
-        [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w2, ps2]}, 
+        [{'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w2, ps2]},
         {'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [ps0]}]
         '''
         for node_dict in nodes:

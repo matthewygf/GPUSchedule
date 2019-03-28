@@ -4,9 +4,8 @@ from __future__ import print_function
 import math
 import random
 from infra.switch import _Switch
-from infra.node import _Node
 from core import util
-from core import flags 
+from core import flags
 # import jobs
 # import log
 
@@ -47,8 +46,8 @@ class _Cluster(object):
         self.node_g64 = list()
         # self.node_g128 = list()
         # self.node_g256 = list()
-        self.node_g = {1: self.node_g1, 2:self.node_g2, 4:self.node_g4, 
-                8:self.node_g8, 12:self.node_g12, 16:self.node_g16, 24:self.node_g24, 32:self.node_g32, 
+        self.node_g = {1: self.node_g1, 2:self.node_g2, 4:self.node_g4,
+                8:self.node_g8, 12:self.node_g12, 16:self.node_g16, 24:self.node_g24, 32:self.node_g32,
                 64:self.node_g64}
                 # 64:self.node_g64, 128:self.node_g128, 256:self.node_g256}
 
@@ -82,9 +81,9 @@ class _Cluster(object):
         else:
             self.set_spec(num_switch, num_node_p_switch, num_gpu_p_node, num_cpu_p_node, mem_p_node)
 
-        '''create/init switch and node objects'''        
+        '''create/init switch and node objects'''
         for s in range(0, self.num_switch):
-            tmp_s = _Switch(s, self.num_node_p_switch, self.num_gpu_p_node, self.num_cpu_p_node, self.mem_p_node) 
+            tmp_s = _Switch(s, self.num_node_p_switch, self.num_gpu_p_node, self.num_cpu_p_node, self.mem_p_node)
             tmp_s.add_nodes(self.num_node_p_switch, self.num_gpu_p_node, self.num_cpu_p_node, self.mem_p_node)
             self.switch_list.append(tmp_s)
 
@@ -98,7 +97,7 @@ class _Cluster(object):
                 node.init_node(self.num_gpu_p_node, self.num_cpu_p_node)
 
         if FLAGS.schedule == 'dlas-gpu-pack':
-            self.init_dlas_pack_gpu() 
+            self.init_dlas_pack_gpu()
 
     # '''
     # Allocate job resource
@@ -112,7 +111,7 @@ class _Cluster(object):
     #         ret = self.ms_yarn_placement(job)
     #     elif FLAGS.scheme == 'balance':
     #         util.print_fn('   balance scheme is applied')
-    #         ret = 
+    #         ret =
     #     else:
     #         util.print_fn('   Default yarn scheme is applied')
     #         ret = self.ms_yarn_placement(job)
@@ -177,7 +176,7 @@ class _Cluster(object):
         num_gpu = job['num_gpu']
         node_list = None
         if num_gpu not in self.node_g:
-            print_fn("error: job[%d] needs %d GPUs" % (job['job_idx'], num_gpu))
+            util.print_fn("error: job[%d] needs %d GPUs" % (job['job_idx'], num_gpu))
             exit()
         node_list = self.node_g[num_gpu]
         # if num_gpu == 1:
@@ -202,7 +201,7 @@ class _Cluster(object):
         #     util.print_fn(" %d gpu is required by job[%d]" % (num_gpu, job['job_idx']))
 
 
-        #placed on capable existing node_set 
+        #placed on capable existing node_set
         if len(node_list) > 0:
             node_set = node_list.pop(0)
             ns_util = node_set['util']
@@ -229,7 +228,7 @@ class _Cluster(object):
             node_set['concurrency'] = 0
             node_set['capacity'] = int(num_node * self.num_gpu_p_node / num_gpu)
             node_set['num_gpus'] = num_gpu
-            node_set['num_jobs'] = 0 
+            node_set['num_jobs'] = 0
             for i in range(num_node):
                 node_set['nodes'].append(self.free_nodes.pop(0))
 
@@ -312,14 +311,14 @@ class _Cluster(object):
                 node_set['concurrency'] = 0
                 node_set['capacity'] = int(num_node * self.num_gpu_p_node / ns_num_gpu)
                 node_set['num_gpus'] = ns_num_gpu
-                node_set['num_jobs'] = 0 
+                node_set['num_jobs'] = 0
                 node_set['util'] = 0
                 for i in range(num_node):
                     node_set['nodes'].append(self.free_nodes.pop(0))
-                
+
                 node_list.append(node_set)
 
-        #re-arrange 
+        #re-arrange
         if i > 0:
             job_list = list()
             for node_set in node_list:
@@ -328,7 +327,7 @@ class _Cluster(object):
                     node_set['jobs'][:] = []
                     node_set['util'] = 0
                     node_set['num_jobs'] = 0
-                
+
             for job in job_list:
                 node_set = node_list[0]
                 job_util = round(job['model']['mem_util'], 2)
@@ -336,7 +335,7 @@ class _Cluster(object):
                 node_set['jobs'].append(job)
                 node_set['num_jobs'] = node_set['num_jobs'] + 1
                 node_list.sort(key = lambda e:e.__getitem__('util'))
-                    
+
 
         util.print_fn("node_g%d expand %d node_sets" % (ns_num_gpu, i))
         return i
@@ -396,8 +395,8 @@ class _Cluster(object):
             switch_job = True
 
         used_gpus = 0
-        util.print_fn("free:%d, 1:%d, 2: %d, 4:%d, 8: %d, 16:%d, 32:%d, 64:%d\n" % (len(self.free_nodes), 
-            len(self.node_g1), len(self.node_g2), len(self.node_g4), len(self.node_g8), 
+        util.print_fn("free:%d, 1:%d, 2: %d, 4:%d, 8: %d, 16:%d, 32:%d, 64:%d\n" % (len(self.free_nodes),
+            len(self.node_g1), len(self.node_g2), len(self.node_g4), len(self.node_g8),
             len(self.node_g16), len(self.node_g32), len(self.node_g64)))
         '''
         total_nodes = len(self.free_nodes) + len(self.node_g1) + len(self.node_g2) + len(self.node_g4) + \
@@ -445,12 +444,12 @@ class _Cluster(object):
                     num_gpu if (len(node_set['jobs']) * num_gpu) > self.num_gpu_p_node else (len(node_set['jobs']) * num_gpu)
                     # self.num_gpu_p_node if len(node_set['jobs']) > self.num_gpu_p_node else len(node_set['jobs'])
                 used_gpus = used_gpus + tmp_used_gpus
-            
+
                 util.print_fn("%d-GPU con:%d, jobs:%d" % (num_gpu, concurrency, len(node_set['jobs'])))
                 i = 0
                 end_list = list()
                 for r_job in node_set['jobs']:
-                    r_job['executed_time'] =  r_job['executed_time'] + time_diff 
+                    r_job['executed_time'] =  r_job['executed_time'] + time_diff
                     #end job
                     if r_job['executed_time'] >= r_job['duration']:
                         r_job['status'] = 'END'
@@ -488,8 +487,8 @@ class _Cluster(object):
             for tmp_ns in release_ns:
                 node_list.remove(tmp_ns)
 
-        logs.gandiva_checkpoint(cur_time, len(self.free_nodes), 
-                                used_gpus, int(self.num_gpu - used_gpus - len(self.free_nodes) * self.num_gpu_p_node), 
+        logs.gandiva_checkpoint(cur_time, len(self.free_nodes),
+                                used_gpus, int(self.num_gpu - used_gpus - len(self.free_nodes) * self.num_gpu_p_node),
                                 len(jobs.pending_jobs), len(jobs.running_jobs),
                                 len(self.node_g1), len(self.node_g2), len(self.node_g4), len(self.node_g8), len(self.node_g16), len(self.node_g32), len(self.node_g64))
         return node_release
@@ -532,7 +531,7 @@ class _Cluster(object):
         #         for tmp_job in switch_list:
         #             node_set['jobs'].remove(tmp_job)
         #             node_set['jobs'].append(tmp_job)
-                    
+
         #     for tmp_job in end_list:
         #         jobs.running_jobs.remove(tmp_job)
         #         node_set['jobs'].remove(tmp_job)
@@ -594,7 +593,7 @@ class _Cluster(object):
         #         node_set['jobs'].remove(tmp_job)
         #         node_set['num_jobs'] = node_set['num_jobs'] - 1
         #         logs.job_complete(tmp_job, cur_time)
- 
+
         #     if len(node_set['jobs']) == 0:
         #         for node in node_set['nodes']:
         #             self.free_nodes.append(node)
@@ -884,19 +883,19 @@ class _Cluster(object):
         # for tmp_ns in release_ns:
         #     self.node_g64.remove(tmp_ns)
 
-        # logs.gandiva_checkpoint(cur_time, len(self.free_nodes), 
-        #                         used_gpus, int(self.num_gpu - used_gpus - len(self.free_nodes) * self.num_gpu_p_node), 
+        # logs.gandiva_checkpoint(cur_time, len(self.free_nodes),
+        #                         used_gpus, int(self.num_gpu - used_gpus - len(self.free_nodes) * self.num_gpu_p_node),
         #                         len(jobs.pending_jobs), len(jobs.running_jobs),
         #                         len(self.node_g1), len(self.node_g2), len(self.node_g4), len(self.node_g8), len(self.node_g16), len(self.node_g32), len(self.node_g64))
         # return node_release
 
 
-    def ms_yarn_placement(self, job):
+    def ms_yarn_placement(self, job_queue, job):
         '''
         MS_YARN, all gpus should come from the same switch
         '''
         for switch in self.switch_list:
-            ret = switch.ms_yarn_alloc_res(job)
+            ret = switch.ms_yarn_alloc_res(job_queue, job)
             if ret == True:
                 return True
             else:
@@ -904,7 +903,7 @@ class _Cluster(object):
         return False
 
 
-    def random_placement(self, job):    
+    def random_placement(self, job):
         '''
         randomly pick up enough resource for both PS and worker in a job
         allocate one by one
@@ -947,7 +946,7 @@ class _Cluster(object):
         #             switch_idx = int(switch_idx)
         #             if switch_idx == switch_s_idx:
         #                 break
-            
+
         #     if allocated == False:
         #         for n in w_node_list:
         #             n.release_job_gpu_cpu(1, 2)
@@ -955,7 +954,7 @@ class _Cluster(object):
         #         return False
 
         for w in range(0, num_w):
-            start_ngid = random.randint(0, self.num_node - 1) 
+            start_ngid = random.randint(0, self.num_node - 1)
             allocated = False
             for i in range(self.num_node):
                 n_gid = int(int(start_ngid + i) % self.num_node)
@@ -1009,7 +1008,7 @@ class _Cluster(object):
         #             switch_idx = int(switch_idx)
         #             if switch_idx == switch_s_idx:
         #                 break
-            
+
         #     if allocated == False:
         #         for n in w_node_list:
         #             n.release_job_gpu_cpu(1, 2)
@@ -1019,7 +1018,7 @@ class _Cluster(object):
         #         return False
 
         for ps in range(0, num_ps):
-            start_ngid = random.randint(0, self.num_node - 1) 
+            start_ngid = random.randint(0, self.num_node - 1)
             allocated = False
             for i in range(self.num_node):
                 n_gid = int(int(start_ngid + i) % self.num_node)
@@ -1124,7 +1123,7 @@ class _Cluster(object):
         return True
 
 
-    def consolidate_random_placement(self, job):    
+    def consolidate_random_placement(self, job):
         '''
         consolidate first, but randomly pick machines;
         if cross machines, still try to consolidate.
@@ -1158,7 +1157,7 @@ class _Cluster(object):
         # go through workers
         w_node_list = list()
         w_switch_list = list()
-        p_done = True 
+        p_done = True
         for i in range(0, num_node):
             switch_idx = random.randint(0, self.num_switch - 1)
             switch_s_idx = switch_idx
@@ -1177,16 +1176,16 @@ class _Cluster(object):
                 while True: #scan all the nodes
                     # print('xxx', node_idx, need_gpu)
                     node = switch.node_list[node_idx]
-                    if node.check_free_gpus() >= need_gpu and node.check_free_cpus() >= need_cpu:                 
+                    if node.check_free_gpus() >= need_gpu and node.check_free_cpus() >= need_cpu:
                         for i in range(need_gpu):
-                            w_node_list.append(node)                               
+                            w_node_list.append(node)
                             w_switch_list.append(switch_idx)
                         node.alloc_job_res(need_gpu, need_cpu)
                         # print(node.id, need_gpu)
                         allocated = True
                         break
-                    else:    
-                        node_idx +=1 
+                    else:
+                        node_idx +=1
                         node_idx %= self.num_node_p_switch
                         node_idx = int(node_idx)
                         if node_idx == node_s_idx:
@@ -1209,9 +1208,9 @@ class _Cluster(object):
                 #     n.release_job_gpu_cpu(need_gpu, need_cpu)
 
         # can't conslidate
-        if p_done == False:  
+        if p_done == False:
             remain_gpu = 0
-            for j in range(i, num_node):            
+            for j in range(i, num_node):
                 remain_gpu += num_gpu_list[j]
             if remain_gpu == 1:
                 # release allocated resource
@@ -1233,7 +1232,7 @@ class _Cluster(object):
                     free_gpu = node.check_free_gpus()
                     free_cpu = node.check_free_cpus()
                     # print('node: %d, free_gpu %d, remain_gpu %d' % (node.id, free_gpu, remain_gpu))
-                    if free_gpu >= 1 and free_cpu >= 6:      
+                    if free_gpu >= 1 and free_cpu >= 6:
                         p_w = free_gpu
                         if free_gpu >= (free_cpu / 6):
                             p_w = int(free_cpu/6)
@@ -1246,8 +1245,8 @@ class _Cluster(object):
                             w_node_list.append(node)
                             w_switch_list.append(switch_idx)
                         node.alloc_job_res(int(p_w), int(p_w * 6))
-                    # else:    
-                    node_idx +=1 
+                    # else:
+                    node_idx +=1
                     node_idx %= self.num_node_p_switch
                     node_idx = int(node_idx)
                     if node_idx == node_s_idx:
@@ -1258,8 +1257,8 @@ class _Cluster(object):
                 switch_idx = int(switch_idx)
                 if switch_idx == switch_s_idx:
                     break
-                    
-            if remain_gpu != 0:                            
+
+            if remain_gpu != 0:
                 '''can't allocate '''
                 for n in w_node_list:
                     n.release_job_gpu_cpu(1,6)
@@ -1388,7 +1387,7 @@ class _Cluster(object):
                 for node in switch.node_list:
                     free_gpu = int(free_gpu + node.check_free_gpus())
             return free_gpu
-        
+
 
     def greedy_placement(self, job):
         '''
@@ -1399,7 +1398,7 @@ class _Cluster(object):
         num_w = job['num_gpu']
         if num_w != 1:
             assert num_ps == num_w
-        
+
         return True
 
     def get_node_with_gid(self, gid):
