@@ -89,3 +89,51 @@ def try_get_job_res(cluster, job_queue, job):
         # job['status'] = 'RUNNING'
         pass
     return ret
+
+
+# List of pending jobs and works out which nodes to place them on
+class Scheduler(object):
+    def __init__(self, infrastructure):
+        self.infrastructure = infrastructure
+        self.job_queue = list()
+        self.agent = 0
+
+        self.scheme = infrastructure.flags.scheme
+        self.placement = infrastructure.flags.schedule
+
+    def add_rack(self, rack):
+        self.infrastructure.racks.append(rack)
+
+    def collate_all_nodes(self):
+        result = self.infrastructure.nodes
+        return result
+
+    def schedule(self, delta):
+        pass
+
+    def unfinished_node_count(self):
+        nodes = self.collate_all_nodes()
+        count = sum([not node.is_finished for node in nodes])
+        return count
+
+    def release_finished_jobs(self):
+        nodes = self.collate_all_nodes()
+        for node in nodes:
+            for job in node.jobs:
+                if job.finished:
+                    node.release_resources(job)
+
+    def poll_loop(self):
+        start_time = time.time()
+        delta_time = 0
+        while True:
+            if len(self.job_queue) > 0:
+                self.schedule(delta_time)
+                self.release_finished_jobs()
+            elif self.unfinished_node_count() == 0:
+                break
+
+            end_time = time.time()
+            delta_time = end_time - start_time
+            start_time = end_time
+

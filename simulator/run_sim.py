@@ -1,4 +1,3 @@
-from __future__ import print_function
 import csv
 import re
 import sys
@@ -12,8 +11,9 @@ import os
 
 from core import util
 from core import flags
-from core import jobs
-from core import log
+from core import job
+from core import job_queue_manager as jq
+import log_manager as lm
 from core import lp
 from core import schedule as scheduler
 
@@ -92,41 +92,6 @@ flags.DEFINE_version('0.1')
 
 
 FLAGS = flags.FLAGS
-
-#get host info
-CLUSTER = cluster.CLUSTER
-
-
-def parse_job_file(trace_file):
-    # Check trace_file is *.csv
-
-    fd = open(trace_file, 'r')
-    deli = ','
-    if trace_file.find('.csv') == (len(trace_file) - 4):
-        deli = ','
-    elif trace_file.find('.txt') == (len(trace_file) - 4):
-        deli = ' '
-
-    reader = csv.DictReader(fd, delimiter=deli)
-    ''' Add job from job trace file'''
-    keys = reader.fieldnames
-    util.print_fn('--------------------------------- Read TF jobs from: %s ---------------------------------' % trace_file)
-    util.print_fn('    we get the following fields:\n        %s' % keys)
-    job_idx = 0
-    for row in reader:
-        # Add job into JOBS
-        JOBS.add_job(row)
-        # JOBS.read_job_info(job_idx, 'num_gpu')
-        job_idx += 1
-
-    assert job_idx == len(JOBS.job_list)
-    assert JOBS.num_job == len(JOBS.job_list)
-    # JOBS.print_all_job_size_info()
-    JOBS.sort_all_jobs()
-    # print(lp.prepare_job_info(JOBS.job_list[0]))
-    util.print_fn('---------------------------------- Get %d TF jobs in total ----------------------------------' % job_idx)
-    # JOBS.read_all_jobs()
-    fd.close()
 
 def parse_cluster_spec():
     if FLAGS.cluster_spec:
@@ -242,8 +207,6 @@ def gandiva_sim_jobs(gputime=False, solve_starvation=0):
 
         # cur_time = cur_time + 1
 
-
-
 def one_queue_fifo_sim_jobs():
     '''
     run jobs in fifo order;
@@ -308,63 +271,6 @@ def one_queue_fifo_sim_jobs():
         # JOBS.print_job_events()
 
         LOG.checkpoint(JOBS, event_time)
-
-# def smallest_first_sim_jobs():
-#     '''
-#     new jobs are added to the end of the ending queue
-#     but in the queue, smallest (gpu) job first be served, until no resource
-#     '''
-#     while (len(JOBS.job_events) + len(JOBS.pending_jobs))> 0:
-#         if len(JOBS.job_events) == 0:
-#             util.print_fn("This cluster is not large enough to run the job")
-#             break
-
-#         event = JOBS.job_events[0]
-#         event_time = event['time']
-#         # util.print_fn('--------------------------------- Handle event[time %d]------------------------------------' % event_time)
-#         #for ending jobs, release gpu
-#         for e_job in event['end_jobs']:
-#             #remove from migratable jobs, if it's there
-#             # JOBS.remote_migratable(e_job)
-
-#             #job completes
-#             CLUSTER.release_job_res(e_job)
-#             # CLUSTER.release_gpus(e_job)
-#             LOG.job_complete(e_job, event_time)
-
-
-#         #for new-start jobs, try to start
-#         for s_job in event['start_jobs']:
-#             #add into pending list
-#             JOBS.move_to_pending(s_job)
-
-#         #sort pending jobs based on the num_gpu
-#         JOBS.pending_jobs.sort(key = lambda e:e.__getitem__('num_gpu'))
-
-#         new_start_list = list()
-#         for p_job in JOBS.pending_jobs:
-#             # ret = CLUSTER.alloc_gpus(p_job)
-#             ret = try_get_job_res(p_job)
-#             if ret == True:
-#                 ''' if remove_from_pending, then will miss the next p_job in the list '''
-#                 new_start_list.append(p_job)
-#                 # JOBS.remove_from_pending(p_job, event_time)
-#                 # JOBS.add_job_end_event(p_job)
-#                 # util.print_fn('----job[%d] starts from pending' % p_job['job_idx'])
-#             else:
-#                 break
-
-#         for ns_job in new_start_list:
-#             JOBS.remove_from_pending(ns_job, event_time)
-#             JOBS.add_job_end_event(ns_job)
-#             util.print_fn('----job[%d] starts from pending' % ns_job['job_idx'])
-
-#         #remove time_event
-#         JOBS.job_events.pop(0)
-#         JOBS.job_events.sort(key = lambda e:e.__getitem__('time'))
-#         # JOBS.print_job_events()
-
-#         LOG.checkpoint(event_time)
 
 def smallest_first_sim_jobs(gputime=False):
     '''
@@ -503,7 +409,6 @@ def cal_shortest_expected_remaining(job_data, a):
     num = job_data['num'] - 1 - idx
     return round(sum(data[idx: (job_data['num'] - 1)]) * 1.0 / num, 2)
 
-
 def shortest_first_sim_jobs(gputime=False):
     '''
     new jobs are added to the end of the ending queue
@@ -637,8 +542,6 @@ def shortest_first_sim_jobs(gputime=False):
 
 
         LOG.checkpoint(JOBS, event_time)
-
-
 
 def multi_dlas_sim_jobs(gputime=False, solve_starvation=0):
     '''
@@ -1163,7 +1066,6 @@ def get_gittins_index(a):
     idx = next(x[0] for x in enumerate(job_info['data']) if x[1] > a)
     return job_info['gittins'][idx]
 
-
 def gittins_sim_jobs(job_dist_data, gputime=False, static_delta=True):
     '''
     gittins index
@@ -1412,8 +1314,6 @@ def gittins_sim_jobs(job_dist_data, gputime=False, static_delta=True):
 
         next_gittins_unit += event_time
         LOG.checkpoint(event_time)
-
-
 
 def dlas_pack_sim_jobs(gputime=False, solve_starvation=0):
     '''
@@ -1744,7 +1644,6 @@ def longest_pending_first_sim_jobs():
 
         LOG.checkpoint(event_time)
 
-
 def sim_job_events():
     '''
     Simulate job start/end, and gpu allocation
@@ -1812,7 +1711,6 @@ def sim_job_events():
         LOG.checkpoint(event_time)
 
     pass
-
 
 def sim_gpu_demands():
     '''
@@ -1895,7 +1793,6 @@ def cal_r_gittins_index(job_data, a):
     # print(idx, idx_delta, p, e_sum, e, r_gi)
     return r_gi
 
-
 def parse_job_dist():
     job_dist_file = os.path.join(os.getcwd(), 'yarn-gput1000.csv')
     fd = open(job_dist_file, 'r')
@@ -1923,7 +1820,6 @@ def parse_job_dist():
 
     return job_dict
 
-
 def main():
 
     if FLAGS.schedule == 'multi-dlas-gpu':
@@ -1931,7 +1827,7 @@ def main():
             util.print_fn("In Main, multi-dlas-gpu without count")
             exit()
     ''' Parse input'''
-    parse_job_file(FLAGS.trace_file)
+    jobs = parse_job_file(FLAGS.trace_file)
     parse_cluster_spec()
 
     ''' prepare logging '''
@@ -1940,77 +1836,78 @@ def main():
     # lp.placement(JOBS.job_list[0])
     ''' Prepare jobs'''
     JOBS.prepare_job_start_events()
-    # sim_job_events()
-    if FLAGS.schedule == 'fifo':
-        one_queue_fifo_sim_jobs()
-    elif FLAGS.schedule == 'fjf':
-        scheduler.fit_first_sim_jobs(JOBS, CLUSTER, LOG)
-    elif FLAGS.schedule == 'sjf':
-        smallest_first_sim_jobs(False)
-    elif FLAGS.schedule == 'lpjf':
-        longest_pending_first_sim_jobs()
-    elif FLAGS.schedule == 'shortest':
-        shortest_first_sim_jobs()
-    elif FLAGS.schedule == 'shortest-expected':
-        JOBS.job_dist_data = parse_job_dist()
-        shortest_first_sim_jobs()
-    elif FLAGS.schedule == 'shortest-gpu':
-        shortest_first_sim_jobs(True)
-    elif FLAGS.schedule == 'dlas':
-        JOBS.job_dist_data = parse_job_dist()
-        dlas_sim_jobs()
-    elif FLAGS.schedule == 'dlas-gpu':
-        dlas_sim_jobs(True)
-    elif FLAGS.schedule == 'dlas-gpu-gittins':
-        JOBS.job_dist_data = parse_job_dist()
-        dlas_sim_jobs(True)
-    elif FLAGS.schedule == 'dlas-gpu-gittins-1':
-        JOBS.job_dist_data = parse_job_dist()
-        dlas_sim_jobs(True, 1)
-    elif FLAGS.schedule == 'dlas-gpu-gittins-2':
-        JOBS.job_dist_data = parse_job_dist()
-        dlas_sim_jobs(True, 2)
-    elif FLAGS.schedule == 'dlas-gpu-gittins-4':
-        JOBS.job_dist_data = parse_job_dist()
-        dlas_sim_jobs(True, 4)
-    elif FLAGS.schedule == 'dlas-gpu-gittins-8':
-        JOBS.job_dist_data = parse_job_dist()
-        dlas_sim_jobs(True, 8)
-    elif FLAGS.schedule == 'dlas-gpu-pack':
-        CLUSTER.init_dlas_pack_gpu()
-        dlas_pack_sim_jobs(True)
-    elif FLAGS.schedule == 'multi-dlas-gpu':
-        # JOBS.init_reserve_gpus(CLUSTER.num_gpu)
-        # JOBS.test_reserve_gpus(CLUSTER.num_gpu)
-        multi_dlas_sim_jobs(True)
-    elif FLAGS.schedule == 'gittins':
-        # JOBS.init_reserve_gpus(CLUSTER.num_gpu)
-        # JOBS.test_reserve_gpus(CLUSTER.num_gpu)
-        job_dist_data = parse_job_dist()
-        gittins_sim_jobs(job_dist_data, True, True)
-    elif FLAGS.schedule == 'dlas-gpu-1':
-        dlas_sim_jobs(True,1)
-    elif FLAGS.schedule == 'dlas-gpu-2':
-        dlas_sim_jobs(True,2)
-    elif FLAGS.schedule == 'dlas-gpu-05':
-        dlas_sim_jobs(True, 0.5)
-    elif FLAGS.schedule == 'dlas-gpu-4':
-        dlas_sim_jobs(True, 4)
-    elif FLAGS.schedule == 'dlas-gpu-8':
-        dlas_sim_jobs(True, 8)
-    elif FLAGS.schedule == 'dlas-gpu-10':
-        dlas_sim_jobs(True, 10)
-    elif FLAGS.schedule == 'dlas-gpu-100':
-        dlas_sim_jobs(True, 100)
-    elif FLAGS.schedule == 'dlas-gpu-1000':
-        dlas_sim_jobs(True, 1000)
-    elif FLAGS.schedule == 'gandiva':
-        CLUSTER.init_gandiva_nodes()
-        gandiva_sim_jobs(True, 1000)
-    elif FLAGS.schedule == 'gpu-demands':
-        sim_gpu_demands()
-    else:
-        one_queue_fifo_sim_jobs()
+
+    # # sim_job_events()
+    # if FLAGS.schedule == 'fifo':
+    #     one_queue_fifo_sim_jobs()
+    # elif FLAGS.schedule == 'fjf':
+    #     scheduler.fit_first_sim_jobs(JOBS, CLUSTER, LOG)
+    # elif FLAGS.schedule == 'sjf':
+    #     smallest_first_sim_jobs(False)
+    # elif FLAGS.schedule == 'lpjf':
+    #     longest_pending_first_sim_jobs()
+    # elif FLAGS.schedule == 'shortest':
+    #     shortest_first_sim_jobs()
+    # elif FLAGS.schedule == 'shortest-expected':
+    #     JOBS.job_dist_data = parse_job_dist()
+    #     shortest_first_sim_jobs()
+    # elif FLAGS.schedule == 'shortest-gpu':
+    #     shortest_first_sim_jobs(True)
+    # elif FLAGS.schedule == 'dlas':
+    #     JOBS.job_dist_data = parse_job_dist()
+    #     dlas_sim_jobs()
+    # elif FLAGS.schedule == 'dlas-gpu':
+    #     dlas_sim_jobs(True)
+    # elif FLAGS.schedule == 'dlas-gpu-gittins':
+    #     JOBS.job_dist_data = parse_job_dist()
+    #     dlas_sim_jobs(True)
+    # elif FLAGS.schedule == 'dlas-gpu-gittins-1':
+    #     JOBS.job_dist_data = parse_job_dist()
+    #     dlas_sim_jobs(True, 1)
+    # elif FLAGS.schedule == 'dlas-gpu-gittins-2':
+    #     JOBS.job_dist_data = parse_job_dist()
+    #     dlas_sim_jobs(True, 2)
+    # elif FLAGS.schedule == 'dlas-gpu-gittins-4':
+    #     JOBS.job_dist_data = parse_job_dist()
+    #     dlas_sim_jobs(True, 4)
+    # elif FLAGS.schedule == 'dlas-gpu-gittins-8':
+    #     JOBS.job_dist_data = parse_job_dist()
+    #     dlas_sim_jobs(True, 8)
+    # elif FLAGS.schedule == 'dlas-gpu-pack':
+    #     CLUSTER.init_dlas_pack_gpu()
+    #     dlas_pack_sim_jobs(True)
+    # elif FLAGS.schedule == 'multi-dlas-gpu':
+    #     # JOBS.init_reserve_gpus(CLUSTER.num_gpu)
+    #     # JOBS.test_reserve_gpus(CLUSTER.num_gpu)
+    #     multi_dlas_sim_jobs(True)
+    # elif FLAGS.schedule == 'gittins':
+    #     # JOBS.init_reserve_gpus(CLUSTER.num_gpu)
+    #     # JOBS.test_reserve_gpus(CLUSTER.num_gpu)
+    #     job_dist_data = parse_job_dist()
+    #     gittins_sim_jobs(job_dist_data, True, True)
+    # elif FLAGS.schedule == 'dlas-gpu-1':
+    #     dlas_sim_jobs(True,1)
+    # elif FLAGS.schedule == 'dlas-gpu-2':
+    #     dlas_sim_jobs(True,2)
+    # elif FLAGS.schedule == 'dlas-gpu-05':
+    #     dlas_sim_jobs(True, 0.5)
+    # elif FLAGS.schedule == 'dlas-gpu-4':
+    #     dlas_sim_jobs(True, 4)
+    # elif FLAGS.schedule == 'dlas-gpu-8':
+    #     dlas_sim_jobs(True, 8)
+    # elif FLAGS.schedule == 'dlas-gpu-10':
+    #     dlas_sim_jobs(True, 10)
+    # elif FLAGS.schedule == 'dlas-gpu-100':
+    #     dlas_sim_jobs(True, 100)
+    # elif FLAGS.schedule == 'dlas-gpu-1000':
+    #     dlas_sim_jobs(True, 1000)
+    # elif FLAGS.schedule == 'gandiva':
+    #     CLUSTER.init_gandiva_nodes()
+    #     gandiva_sim_jobs(True, 1000)
+    # elif FLAGS.schedule == 'gpu-demands':
+    #     sim_gpu_demands()
+    # else:
+    #     one_queue_fifo_sim_jobs()
 
 
 if __name__ == '__main__':
@@ -2024,10 +1921,10 @@ if __name__ == '__main__':
     filehandler.setFormatter(
         logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
     logging.getLogger().addHandler(filehandler)
-    global LOG
-    global JOBS
-    JOBS = jobs._TFJobs(FLAGS)
-    LOG = log._Log(output_dir)
+    project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    trace_path = os.path.join(project_dir, FLAGS.trace_file)
+    jq_manager = jq.JobQueueManager(FLAGS, trace_path)
+    log_manager = lm.LogManager(output_dir, FLAGS)
     main()
 
     logging.getLogger().removeHandler(filehandler)

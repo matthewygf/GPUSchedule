@@ -6,7 +6,7 @@ from __future__ import print_function
 from infra.node import _Node
 from core import flags
 from core import util
-from core import jobs
+from core import job
 import math
 
 class _Switch(object):

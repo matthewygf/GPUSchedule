@@ -16,139 +16,26 @@ import numpy
 import math
 from core import util
 from core import models
+from core import resource_requirment as rq
+
 import csv
 import time
 import sys
-# import cluster
-# from switch import _Switch
-# from node import _Node
-# from cluster import _Cluster
-
-# #get host info
-# CLUSTER = cluster.CLUSTER
-
-
-class Environment(object):
-    def __init__(self):
-        pass
-
-    def step(self, action):
-        pass
-
-
-class ResourceRequirements(object):
-    def __init__(self, cpu=0, gpu=0, mem=0):
-        self.cpu_needed = cpu
-        self.gpu_needed = gpu
-        self.mem_needed = mem
-
-
-# A single machine
-class Node(object):
-    def __init__(self, node_id, cpus=0, gpus=0, memory=0):
-        self.node_id = node_id
-        self.cpu_count = cpus
-        self.gpu_count = gpus
-        self.mem_size = memory
-
-        self.network_usage = 0
-        self.cpu_used = 0
-        self.gpu_used = 0
-        self.mem_used = 0
-
-        self.jobs = list()
-
-    def __eq__(self, other):
-        result = self.node_id == other.node_id
-        return result
-
-    def get_network_usage(self):
-        return self.network_usage
-
-    def check_util(self):
-        result = (float(self.cpu_used) / float(self.cpu_count),
-                  float(self.gpu_used) / float(self.gpu_count),
-                  float(self.mem_used) / float(self.mem_size))
-
-        return result
-
-    def resize_node(self, cpus, gpus, memory):
-        self.cpu_count = cpus
-        self.gpu_count = gpus
-        self.mem_size = memory
-
-    def check_resources(self, requirements):
-        result = (requirements.cpu_needed < (self.cpu_count - self.cpu_used))
-        result = result and (requirements.gpu_needed < (self.gpu_count - self.gpu_used))
-        result = result and (requirements.mem_needed < (self.mem_size - self.mem_used))
-
-        return result
-
-    def cpu_free(self):
-        result = (self.cpu_count - self.cpu_used)
-        return result
-
-    def gpu_free(self):
-        result = (self.gpu_count - self.gpu_used)
-        return result
-
-    def mem_free(self):
-        result = (self.mem_size - self.mem_used)
-        return result
-
-    def alloc_job(self, requirements):
-        self.cpu_used += requirements.cpu_needed
-        self.gpu_used += requirements.gpu_needed
-        self.mem_used += requirements.mem_needed
-
-    def release_resources(self, job):
-        requirements = job.resource_requirements
-        self.cpu_used -= requirements.cpu_needed
-        self.gpu_used -= requirements.gpu_needed
-        self.mem_used -= requirements.mem_needed
-
-        assert self.jobs.__contains__(job), "Node did not contain the job specified"
-        self.jobs.remove(job)
-
-    def add_job(self, job):
-        requirements = job.resource_requirements
-        result = False
-        if self.check_resources(requirements):
-            self.alloc_job(requirements)
-            self.jobs.append(job)
-            job.migration_count += 1
-            result = True
-        else:
-            util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
-
-        return result
-
-
-# A group of nodes
-class Rack(object):
-    def __init__(self, rack_id, bandwidth):
-        self.rack_id = rack_id
-        self.nodes = list()
-        self.network_bandwidth = bandwidth
-
-    def __eq__(self, other):
-        result = (self.rack_id == other.rack_id)
-        return result
-
-    def add_node(self, node):
-        if not self.nodes.__contains__(node):
-            self.nodes.append(node)
-        else:
-            util.print_fn("Node already in rack", util.LOG_LEVEL_WARNING)
-
+import os
 
 # A single job with CPU, GPU and memory requirements
 class Job(object):
-    def __init__(self, job_id, model, duration, cpu=0, gpu=0, mem=0):
+    def __init__(self, 
+                 job_id, 
+                 model, 
+                 duration, 
+                 iterations, 
+                 interval, 
+                 cpu=0, 
+                 gpu=0, 
+                 mem=0):
         self.job_id = job_id
-
-        self.resource_requirements = ResourceRequirements()
-
+        self.resource_requirements = rq.ResourceRequirements()
         self.started = False
         self.running = False
         self.finished = False
@@ -159,10 +46,11 @@ class Job(object):
         self.migration_count = 0
         self.ps_count = gpu
         self.worker_count = gpu
-
         self.cpus = cpu
         self.gpus = gpu
         self.memory = mem
+        self.iterations = iterations
+        self.interval = interval
 
     def __eq__(self, other):
         result = (self.job_id == other.job_id)
@@ -191,94 +79,6 @@ class Job(object):
     def restart(self):
         self.running = True
         self.migration_count += 1
-
-
-class Infrastructure(object):
-    def __init__(self, flags):
-        self.flags = flags
-        self.racks = list()
-        self.nodes = list()
-        self._setup_nodes(flags)
-
-    def _setup_nodes(self, flags):
-        for rack_id in range(0, flags.num_switch):
-            rack = Rack(rack_id, flags.rack_bandwidth)
-            for node_id in range(0, flags.num_nodes_p_switch):
-                node = Node(node_id, flags.num_cpu_p_node, flags.num_gpu_p_node, flags.mem_p_node)
-                self.nodes.append(node)
-                rack.add_node(node)
-
-            self.racks.append(rack)
-
-    def get_available_cpu_count(self):
-        result = 0
-        for node in self.nodes:
-            result += node.cpu_free()
-
-        return result
-
-    def get_available_gpu_count(self):
-        result = 0
-        for node in self.nodes:
-            result += node.gpu_free()
-
-        return result
-
-    def get_available_mem_size(self):
-        result = 0
-        for node in self.nodes:
-            result += node.mem_free()
-
-        return result
-
-
-# List of pending jobs and works out which nodes to place them on
-class Scheduler(object):
-    def __init__(self, infrastructure):
-        self.infrastructure = infrastructure
-        self.job_queue = list()
-        self.agent = 0
-
-        self.scheme = infrastructure.flags.scheme
-        self.placement = infrastructure.flags.schedule
-
-    def add_rack(self, rack):
-        self.infrastructure.racks.append(rack)
-
-    def collate_all_nodes(self):
-        result = self.infrastructure.nodes
-        return result
-
-    def schedule(self, delta):
-        pass
-
-    def unfinished_node_count(self):
-        nodes = self.collate_all_nodes()
-        count = sum([not node.is_finished for node in nodes])
-        return count
-
-    def release_finished_jobs(self):
-        nodes = self.collate_all_nodes()
-        for node in nodes:
-            for job in node.jobs:
-                if job.finished:
-                    node.release_resources(job)
-
-    def poll_loop(self):
-        start_time = time.time()
-        delta_time = 0
-        while True:
-            if len(self.job_queue) > 0:
-                self.schedule(delta_time)
-                self.release_finished_jobs()
-            elif self.unfinished_node_count() == 0:
-                break
-
-            end_time = time.time()
-            delta_time = end_time - start_time
-            start_time = end_time
-
-
 
 class _TFJobs(object):
 
@@ -355,10 +155,7 @@ class _TFJobs(object):
         self.queues = [list() for i in range(self.num_queue)]
         self.queue_limit = [3250, 7200, 18000]
 
-        # mem info in GB
-        self.worker_mem = 5
-        self.ps_mem = 6
-        self.p_w_mem = 0.1
+        
 
         #sim-gpu-demands
         self.gpu_job = dict()
@@ -429,16 +226,11 @@ class _TFJobs(object):
     def add_job(self, job_dict):
         ''' Add job (job_dict) into job_list'''
         for key, value in job_dict.items():
-        # for key, value in job_dict.iteritems():
             if value is None:
                 continue
             if value.isdigit():
                 job_dict[key] = int(value)
         job_dict['duration'] = int(float(job_dict['duration']))
-        # job_dict['duration'] = int(job_dict['duration'])
-
-        job_dict['rank'] = sys.maxsize
-
 
         if 'start_time' not in job_dict:
             job_dict['start_time'] = 0
@@ -507,7 +299,6 @@ class _TFJobs(object):
                 self.gpu_job[num_gpu] = self.g_job(num_gpu)
 
             self.gpu_job[num_gpu].total_job += 1
-
 
     def print_all_job_size_info(self):
         '''

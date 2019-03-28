@@ -1,21 +1,15 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import subprocess
 import csv
 import math
 
 from core import util
 from core import flags
-from core import jobs
+from core import job
 
 from infra import cluster
 
 FLAGS = flags.FLAGS
 CLUSTER = cluster.CLUSTER
-
-
 
 class _Log(object):
 
@@ -93,7 +87,6 @@ class _Log(object):
             else:
                 log_writer.writerow(['time', 'job_id', 'num_gpu', 'submit_time', 'start_time', 'end_time', 'executed_time', 'JCT', 'duration', 'pending_time', 'preempt', 'promote'])
         fd.close()
-
 
     def dump_all_logs(self):
         fd = open(self.log_file, 'a+')
@@ -264,8 +257,6 @@ class _Log(object):
         if len(self.log_list) >= 1:
             self.dump_all_logs()
 
-
-
     def checkpoint_multi_dlas_gpu(self, job_queue, event_time):
         '''
         Record cluster, and job information, including:
@@ -354,7 +345,6 @@ class _Log(object):
         self.job_list.append(log_list)
         if len(self.job_list) >= 1:
             self.dump_job_logs()
-
 
 
 _allowed_symbols = [

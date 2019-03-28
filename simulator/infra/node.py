@@ -164,3 +164,84 @@ class _Node(object):
         gpu = self.release_gpus(num_gpu)
 
         return (cpu and gpu)
+
+
+# A single machine
+class Node(object):
+    def __init__(self, node_id, cpus=0, gpus=0, memory=0):
+        self.node_id = node_id
+        self.cpu_count = cpus
+        self.gpu_count = gpus
+        self.mem_size = memory
+
+        self.network_usage = 0
+        self.cpu_used = 0
+        self.gpu_used = 0
+        self.mem_used = 0
+
+        self.jobs = list()
+
+    def __eq__(self, other):
+        result = self.node_id == other.node_id
+        return result
+
+    def get_network_usage(self):
+        return self.network_usage
+
+    def check_util(self):
+        result = (float(self.cpu_used) / float(self.cpu_count),
+                  float(self.gpu_used) / float(self.gpu_count),
+                  float(self.mem_used) / float(self.mem_size))
+
+        return result
+
+    def resize_node(self, cpus, gpus, memory):
+        self.cpu_count = cpus
+        self.gpu_count = gpus
+        self.mem_size = memory
+
+    def check_resources(self, requirements):
+        result = (requirements.cpu_needed < (self.cpu_count - self.cpu_used))
+        result = result and (requirements.gpu_needed < (self.gpu_count - self.gpu_used))
+        result = result and (requirements.mem_needed < (self.mem_size - self.mem_used))
+
+        return result
+
+    def cpu_free(self):
+        result = (self.cpu_count - self.cpu_used)
+        return result
+
+    def gpu_free(self):
+        result = (self.gpu_count - self.gpu_used)
+        return result
+
+    def mem_free(self):
+        result = (self.mem_size - self.mem_used)
+        return result
+
+    def alloc_job(self, requirements):
+        self.cpu_used += requirements.cpu_needed
+        self.gpu_used += requirements.gpu_needed
+        self.mem_used += requirements.mem_needed
+
+    def release_resources(self, job):
+        requirements = job.resource_requirements
+        self.cpu_used -= requirements.cpu_needed
+        self.gpu_used -= requirements.gpu_needed
+        self.mem_used -= requirements.mem_needed
+
+        assert self.jobs.__contains__(job), "Node did not contain the job specified"
+        self.jobs.remove(job)
+
+    def add_job(self, job):
+        requirements = job.resource_requirements
+        result = False
+        if self.check_resources(requirements):
+            self.alloc_job(requirements)
+            self.jobs.append(job)
+            job.migration_count += 1
+            result = True
+        else:
+            util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
+
+        return result
