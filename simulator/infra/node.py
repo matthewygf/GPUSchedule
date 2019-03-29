@@ -166,7 +166,6 @@ class _Node(object):
         return (cpu and gpu)
 
 
-# A single machine
 class Node(object):
     def __init__(self, node_id, cpus=0, gpus=0, memory=0):
         self.node_id = node_id
@@ -200,13 +199,6 @@ class Node(object):
         self.gpu_count = gpus
         self.mem_size = memory
 
-    def check_resources(self, requirements):
-        result = (requirements.cpu_needed < (self.cpu_count - self.cpu_used))
-        result = result and (requirements.gpu_needed < (self.gpu_count - self.gpu_used))
-        result = result and (requirements.mem_needed < (self.mem_size - self.mem_used))
-
-        return result
-
     def cpu_free(self):
         result = (self.cpu_count - self.cpu_used)
         return result
@@ -219,29 +211,24 @@ class Node(object):
         result = (self.mem_size - self.mem_used)
         return result
 
-    def alloc_job(self, requirements):
-        self.cpu_used += requirements.cpu_needed
-        self.gpu_used += requirements.gpu_needed
-        self.mem_used += requirements.mem_needed
+    def is_free(self):
+        return self.gpu_free() > 0
 
     def release_resources(self, job):
-        requirements = job.resource_requirements
-        self.cpu_used -= requirements.cpu_needed
-        self.gpu_used -= requirements.gpu_needed
-        self.mem_used -= requirements.mem_needed
-
+        self.cpu_used -= job.cpu
+        self.gpu_used -= job.gpu
+        self.mem_used -= job.mem
         assert self.jobs.__contains__(job), "Node did not contain the job specified"
         self.jobs.remove(job)
 
-    def add_job(self, job):
-        requirements = job.resource_requirements
-        result = False
-        if self.check_resources(requirements):
-            self.alloc_job(requirements)
+    def try_alloc_job(self, job):
+        allow = False
+        allow = self.gpu_free() >= job.gpu
+        allow = self.cpu_free() >= job.cpu
+        allow = self.mem_free() >= job.mem
+        if allow:  
+            job.execute()
             self.jobs.append(job)
-            job.migration_count += 1
-            result = True
         else:
             util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
-
-        return result
+        return allow

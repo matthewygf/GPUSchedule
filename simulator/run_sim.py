@@ -4,7 +4,6 @@ import sys
 import types
 import time
 import math
-#parse args
 import argparse
 import copy
 import os
@@ -15,16 +14,11 @@ from core import job
 from core import job_queue_manager as jq
 import log_manager as lm
 from core import lp
-from core import schedule as scheduler
-
-from infra import cluster
+from core import schedule as sche
+from infra import infrastructure as cluster
 
 import logging
 import datetime
-
-# import hosts
-# import placement_scheme as scheme
-# import cmd
 
 # parse input arguments
 flags.DEFINE_string('trace_file', 'tf_job.csv',
@@ -92,58 +86,6 @@ flags.DEFINE_version('0.1')
 
 
 FLAGS = flags.FLAGS
-
-def parse_cluster_spec():
-    if FLAGS.cluster_spec:
-        print(FLAGS.cluster_spec)
-        spec_file = FLAGS.cluster_spec
-        fd = open(spec_file, 'r')
-
-        deli = ','
-        if spec_file.find('.csv') == (len(spec_file) - 4):
-            deli = ','
-        elif spec_file.find('.txt') == (len(spec_file) - 4):
-            deli = ' '
-
-        reader = csv.DictReader(fd, delimiter=deli)
-
-        keys = reader.fieldnames
-        util.print_fn(keys)
-        if 'num_switch' not in keys:
-            return
-        if 'num_node_p_switch' not in keys:
-            return
-        if 'num_gpu_p_node' not in keys:
-            return
-        if 'num_cpu_p_node' not in keys:
-            return
-        if 'mem_p_node' not in keys:
-            return
-
-        ''' there should be only one line remaining'''
-        assert reader.line_num == 1
-
-        ''' get cluster spec '''
-        for row in reader:
-            # util.print_fn('num_switch %s' % row['num_switch'])
-            FLAGS.num_switch = int(row['num_switch'])
-            FLAGS.num_node_p_switch = int(row['num_node_p_switch'])
-            FLAGS.num_gpu_p_node = int(row['num_gpu_p_node'])
-            FLAGS.num_cpu_p_node = int(row['num_cpu_p_node'])
-            FLAGS.mem_p_node = int(row['mem_p_node'])
-        fd.close()
-
-    util.print_fn("num_switch: %d" % FLAGS.num_switch)
-    util.print_fn("num_node_p_switch: %d" % FLAGS.num_node_p_switch)
-    util.print_fn("num_gpu_p_node: %d" % FLAGS.num_gpu_p_node)
-    util.print_fn("num_cpu_p_node: %d" % FLAGS.num_cpu_p_node)
-    util.print_fn("mem_p_node: %d" % FLAGS.mem_p_node)
-
-    '''init infra'''
-    CLUSTER.init_infra()
-    # util.print_fn(lp.prepare_cluster_info())
-    util.print_fn('--------------------------------- End of cluster spec ---------------------------------')
-    return
 
 '''
 Gandiva scheduler assumption
@@ -1820,22 +1762,24 @@ def parse_job_dist():
 
     return job_dict
 
-def main(job_queue_manager, log_manager):
+def main(log_manager):
 
     if FLAGS.schedule == 'multi-dlas-gpu':
-        if FLAGS.scheme != 'count':
-            util.print_fn("In Main, multi-dlas-gpu without count")
-            exit()
-    ''' Parse input'''
-    #TODO: parse cluster into our new infra class
-    parse_cluster_spec()
+        assert FLAGS.scheme != 'count', 'multi-dlas-gpu need to be without count'
 
-    ''' prepare logging '''
-    # LOG.init_log()
+    #init infrastructure
+    infrastructure = cluster.Infrastructure(FLAGS)
 
-    # lp.placement(JOBS.job_list[0])
-    ''' Prepare jobs'''
-    # JOBS.prepare_job_start_events()
+    # init Logging
+    log_manager.init(infrastructure)
+
+    # NOTE: init scheduler and jobs
+    jq_manager = jq.JobQueueManager(FLAGS)
+    scheduler = sche.Scheduler(infrastructure, jq_manager)
+    scheduler.sort_job_trace()
+
+    # NOTE: start simulation
+    scheduler.start()
 
     # # sim_job_events()
     # if FLAGS.schedule == 'fifo':
@@ -1909,7 +1853,6 @@ def main(job_queue_manager, log_manager):
     # else:
     #     one_queue_fifo_sim_jobs()
 
-
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)  # pylint: disable=line-too-long
     execution_id = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')
@@ -1921,10 +1864,7 @@ if __name__ == '__main__':
     filehandler.setFormatter(
         logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
     logging.getLogger().addHandler(filehandler)
-    project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-    trace_path = os.path.join(project_dir, FLAGS.trace_file)
-    jq_manager = jq.JobQueueManager(FLAGS, trace_path)
     log_manager = lm.LogManager(output_dir, FLAGS)
-    main(jq_manager, log_manager)
+    main(log_manager)
 
     logging.getLogger().removeHandler(filehandler)

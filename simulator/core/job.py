@@ -23,32 +23,42 @@ import time
 import sys
 import os
 
-# A single job with CPU, GPU and memory requirements
 class Job(object):
+    """
+    NOTE: 
+    Assumption:
+    1. each GPU is a worker, in reality, this could be different. 
+    2.if number of gpu required by a job is less than 1, 
+    assume only 1 gpu, no worker , no ps.
+    3. if number of gpu required by a job is greater than 1, 
+    assumed ps is the mod of num_gpu_p_node
+    4. assume each job have at least some amount of cpu.
+    5. assume each job have at least some amount of mem.
+    """
     def __init__(self, 
                  job_id, 
                  model, 
                  duration, 
                  iterations, 
                  interval, 
-                 cpu=0, 
-                 gpu=0, 
-                 mem=0):
+                 submit_time,
+                 gpu=0):
         self.job_id = job_id
-        self.resource_requirements = rq.ResourceRequirements()
         self.started = False
         self.running = False
         self.finished = False
         self.start_time = 0
         self.duration = duration
+        self.submit_time = submit_time
         self.pending_time = 0
         self.model = model
         self.migration_count = 0
-        self.ps_count = gpu
-        self.worker_count = gpu
-        self.cpus = cpu
+        self.ps_count = gpu // 4 if gpu > 1 else 0
+        self.worker_count = gpu if gpu > 1 else 0
         self.gpus = gpu
-        self.memory = mem
+        self.task_count = self.ps_count + self.worker_count
+        self.cpus = 4 if gpu == 1 else self.task_count * 4
+        self.memory = 8 if gpu == 1 else self.task_count * 6
         self.iterations = iterations
         self.interval = interval
 

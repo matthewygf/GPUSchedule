@@ -8,7 +8,12 @@ class JobQueueManager(object):
     that host all the jobs instead of wacky list, or dictionaries"""
     def __init__(self, flags, file_path=None, num_queue=1): 
         self.flags = flags
-        self.file_path = file_path
+        if file_path is None:
+            project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+            trace_path = os.path.join(project_dir, self.flags.trace_file)
+            self.file_path = trace_path
+        else:
+            self.file_path = file_path
      
         self.num_queue = num_queue
         self.queues = []
@@ -26,7 +31,6 @@ class JobQueueManager(object):
 
     def parse_job_file(self):
         """from a csv convert to jobs"""
-        print("going to start parsing jobs csv")
         if not os.path.exists(self.file_path):
             raise ValueError()
 
@@ -46,12 +50,10 @@ class JobQueueManager(object):
         util.print_fn('    we get the following fields:\n        %s' % keys)
         job_idx = 0
         for row in reader:
-            # Add job into JOBS
             self._add_to_job_queue(self.parse_job(row, job_idx))
             job_idx += 1
 
-        assert job_idx == self._total_jobs()
-        # print(lp.prepare_job_info(JOBS.job_list[0]))
+        assert job_idx == self.total_jobs()
         util.print_fn('---------------------------------- Get %d TF jobs in total ----------------------------------' % job_idx)
         fd.close()
 
@@ -62,12 +64,12 @@ class JobQueueManager(object):
         num_gpus = job_dict['num_gpu']
         submit_time = job_dict['submit_time']
         iterations = job_dict['iterations']
-        return job.Job(idx, model, duration, iterations, interval, gpu=num_gpus)
+        return job.Job(idx, model, duration, iterations, interval, submit_time, gpu=num_gpus)
 
     def _can_add(self, queue_idx):
             return len(self.queues[queue_idx]) < self.queue_limit[queue_idx]
 
-    def _total_jobs(self):
+    def total_jobs(self):
         num = 0
         for q in self.queues:
             num += len(q)
@@ -89,3 +91,6 @@ class JobQueueManager(object):
 
     def _setup(self):
         self.parse_job_file()
+
+    def pop(self, queue_idx=0, job_in_queue=0):
+        return self.queues[queue_idx].pop(job_in_queue)

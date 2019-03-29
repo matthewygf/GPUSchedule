@@ -1,6 +1,8 @@
 from core import util
 from core import lp
 from core import flags
+from core import algorithm
+import time
 
 FLAGS = flags.FLAGS
 
@@ -90,16 +92,19 @@ def try_get_job_res(cluster, job_queue, job):
         pass
     return ret
 
-
-# List of pending jobs and works out which nodes to place them on
 class Scheduler(object):
-    def __init__(self, infrastructure):
+    """
+    Scheduler object to manage jobs and schedule placements
+    """
+    def __init__(self, infrastructure, jobqueuemanager):
         self.infrastructure = infrastructure
-        self.job_queue = list()
-        self.agent = 0
+        self.jq_manager = jobqueuemanager
+        self.placement = infrastructure.flags.scheme
+        self.schedule = infrastructure.flags.schedule
+        self.finished_jobs = []
 
-        self.scheme = infrastructure.flags.scheme
-        self.placement = infrastructure.flags.schedule
+        # TODO: RL agent
+        self.agent = None
 
     def add_rack(self, rack):
         self.infrastructure.racks.append(rack)
@@ -108,8 +113,12 @@ class Scheduler(object):
         result = self.infrastructure.nodes
         return result
 
-    def schedule(self, delta):
-        pass
+    def num_free_nodes(self):
+        all_nodes = self.collate_all_nodes()
+        return sum([n.is_free() for n in all_nodes])
+
+    def _schedule(self, delta):
+        result = algorithm.scheduling_algorithms[self.schedule](self, delta)
 
     def unfinished_node_count(self):
         nodes = self.collate_all_nodes()
@@ -123,17 +132,23 @@ class Scheduler(object):
                 if job.finished:
                     node.release_resources(job)
 
-    def poll_loop(self):
+    def start(self):
         start_time = time.time()
         delta_time = 0
-        while True:
-            if len(self.job_queue) > 0:
-                self.schedule(delta_time)
-                self.release_finished_jobs()
-            elif self.unfinished_node_count() == 0:
-                break
+        current_remaining = self.jq_manager.total_jobs() 
+        self._schedule(delta_time)
+        # while current_remaining > 0:
+        #     # NOTE: Make decision on whether to:
+        #     # 1. schedule new jobs
+        #     # 2. preempt running jobs
+        #     # 3. migrate running jobs
+        #     self._schedule(delta_time)
+        #     self.release_finished_jobs()
+        #     end_time = time.time()
+        #     delta_time = end_time - start_time
+        #     start_time = end_time
+        #     current_remaining = self.jq_manager.total_jobs() 
 
-            end_time = time.time()
-            delta_time = end_time - start_time
-            start_time = end_time
-
+    def sort_job_trace(self):
+        for i, q in enumerate(self.jq_manager.queues):
+            self.jq_manager.queues[i] = sorted(q, key=lambda x: int(x.submit_time))

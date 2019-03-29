@@ -1,4 +1,5 @@
 import csv
+import os
 
 class LogManager(object):
     def __init__(self, log_path, flags):
@@ -6,7 +7,7 @@ class LogManager(object):
         self.flags = flags
         self.is_count = self.flags.scheme == 'count'
     
-    def init(self):
+    def init(self, infrastructure):
         self.log_cluster = os.path.join(self.log_path, 'cluster.csv')
         self.log_job = os.path.join(self.log_path, 'job.csv')
         if not self.is_count:
@@ -15,7 +16,7 @@ class LogManager(object):
             self.log_network = os.path.join(self.log_path, 'network.csv')
             self.log_mem = os.path.join(self.log_path, 'memory.csv')
         
-        self._init_all_csv()
+        self._init_all_csv(infrastructure)
 
     def _init_all_csv(self, infrastructure):
         # init cluster log
@@ -40,7 +41,7 @@ class LogManager(object):
             # 2. gpu
             gpu_log = open(self.log_gpu, 'w+')
             writer = csv.writer(gpu_log)
-            writer.writerow(['time']+['gpu'] + str(i) for i in range(infrastructure.get_total_gpus()))
+            writer.writerow(['time']+['gpu' + str(i) for i in range(infrastructure.get_total_gpus())])
             gpu_log.close()
             del gpu_log
 
@@ -75,3 +76,5 @@ class LogManager(object):
             else:
                 writer.writerow(['time', 'job_id', 'num_gpu', 'submit_time', 'start_time', 'end_time', 'executed_time', 'JCT', 'duration', 'pending_time', 'preempt', 'promote'])
         job_log.close()
+
+        assert os.path.exists(self.log_cluster)

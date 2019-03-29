@@ -6,11 +6,6 @@ import random
 from infra.switch import _Switch
 from core import util
 from core import flags
-# import jobs
-# import log
-
-# JOBS = jobs.JOBS
-# LOG = log.LOG
 FLAGS = flags.FLAGS
 
 class _Cluster(object):
