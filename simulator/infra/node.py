@@ -178,7 +178,10 @@ class Node(object):
         self.gpu_used = 0
         self.mem_used = 0
 
-        self.jobs = list()
+        self.running_jobs = []
+        self.placed_jobs = []
+        self.running_tasks = []
+        self.placed_tasks = []
 
     def __eq__(self, other):
         result = self.node_id == other.node_id
@@ -212,7 +215,7 @@ class Node(object):
         return result
 
     def is_free(self):
-        return self.gpu_free() > 0
+        return self.gpu_free() > 0 and self.cpu_free() > 0 and self.mem_free() > 0
 
     def release_resources(self, job):
         self.cpu_used -= job.cpu
@@ -221,14 +224,62 @@ class Node(object):
         assert self.jobs.__contains__(job), "Node did not contain the job specified"
         self.jobs.remove(job)
 
+    def can_fit_num_task(self, tasks):
+        """
+        NOTE: CRITICAL STUFF
+        return integer, -1 if can fit all tasks.
+        """
+        worker_count = sum([1 for t in tasks if not t.is_ps])
+        cpu_per_task = tasks[0].cpu
+        mem_per_task = tasks[0].mem
+
+        gpus_offset = self.gpu_free() - worker_count
+        cpus_task_offset = (self.cpu_free() // cpu_per_task) - len(tasks)
+        mems_task_offset = (self.mem_free() // mem_per_task) - len(tasks)
+        num_tasks_gpus_can_fit = worker_count if gpus_offset >= 0 else worker_count + gpus_offset
+        num_tasks_cpus_can_fit = len(tasks) if cpus_task_offset >= 0 else len(tasks) + cpus_task_offset
+        num_tasks_mems_can_fit = len(tasks) if mems_task_offset  >= 0 else len(tasks) + mems_task_offset
+        num_ps_tasks_can_fit = min(num_tasks_cpus_can_fit, num_tasks_mems_can_fit) - num_tasks_gpus_can_fit
+        return num_ps_tasks_can_fit, num_tasks_gpus_can_fit
+
+    def execute_job(self, job_id):
+        # check placed tasks in current node that is correspond to same job_id
+        result = False
+        started_jobs = []
+        started_tasks = []
+        for i, job in enumerate(self.placed_jobs):
+            if job.job_id == job_id:
+                for j, t in enumerate(self.placed_tasks):
+                    if t.job_id == job_id:
+                        t.execute()
+                        started_tasks.append(j)
+                        self.running_tasks.append(t)    
+                job.execute()
+                self.running_jobs.append(job)
+                started_jobs.append(i)
+                break
+
+        for idx in started_tasks:
+            self.placed_tasks.pop(idx)
+
+        for idx in started_jobs:
+            self.placed_jobs.pop(idx)
+            result = True
+
+        util.print_fn("node %d, total len of placed tasks: %d, total len of placed jobs %d" % 
+                        (self.node_id, len(self.placed_tasks), len(self.placed_jobs)))
+        util.print_fn("node %d, total len of running tasks: %d, total len of running jobs %d" % 
+                        (self.node_id, len(self.running_tasks), len(self.running_jobs)))
+        return result
+
     def try_alloc_job(self, job):
-        allow = False
-        allow = self.gpu_free() >= job.gpu
-        allow = self.cpu_free() >= job.cpu
-        allow = self.mem_free() >= job.mem
-        if allow:  
-            job.execute()
-            self.jobs.append(job)
+        result = False
+        ps_tasks, worker_tasks = self.can_fit_num_task(job.tasks)
+        if ps_tasks + worker_tasks >= job.task_count:
+            self.placed_jobs.append(job)
+            self.placed_tasks = self.placed_tasks + job.tasks
+            util.print_fn("placed job %d, tasks %d at node %d" % (job.job_id, len(job.tasks), self.node_id))
+            result = True
         else:
             util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
-        return allow
+        return result

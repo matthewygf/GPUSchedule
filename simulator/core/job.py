@@ -23,6 +23,35 @@ import time
 import sys
 import os
 
+class Task(object):
+    """NOTE: 
+    each job can have multiple tasks, 
+    each task can be identified from job_id"""
+    def __init__(self, 
+                 job_id,
+                 task_id,
+                 is_ps=False,
+                 cpu=0,
+                 mem=0,
+                 gpu=0):
+        self.job_id = job_id
+        self.task_id = task_id
+        self.is_ps = is_ps
+        self.cpu = cpu
+        self.mem = mem
+        self.gpu = gpu
+        self.start_time = 0
+        self.started = False
+        self.running = False
+        self.finished = False
+        self.migration_count = 0
+    
+    def execute(self):
+        self.start_time = time.time()
+        self.migration_count += 1
+        self.started = True
+        self.running = True
+    
 class Job(object):
     """
     NOTE: 
@@ -31,9 +60,10 @@ class Job(object):
     2.if number of gpu required by a job is less than 1, 
     assume only 1 gpu, no worker , no ps.
     3. if number of gpu required by a job is greater than 1, 
-    assumed ps is the mod of num_gpu_p_node
-    4. assume each job have at least some amount of cpu.
-    5. assume each job have at least some amount of mem.
+    assumed ps is the mod of num_gpu_p_node, 
+    if less than 4, then it is between model replica, no need ps.
+    4. assume each task (ps, workers) have same amount of cpu.
+    5. assume each task (ps, workers) have same amount of mem.
     """
     def __init__(self, 
                  job_id, 
@@ -52,15 +82,29 @@ class Job(object):
         self.submit_time = submit_time
         self.pending_time = 0
         self.model = model
+        # TODO: 
+        # Have a dictionary to map the size of the model.
+        self.model_size = 0
         self.migration_count = 0
         self.ps_count = gpu // 4 if gpu > 1 else 0
-        self.worker_count = gpu if gpu > 1 else 0
+        self.worker_count = gpu 
         self.gpus = gpu
         self.task_count = self.ps_count + self.worker_count
-        self.cpus = 4 if gpu == 1 else self.task_count * 4
-        self.memory = 8 if gpu == 1 else self.task_count * 6
+        self.task_id = ['worker' + str(task) if task <= self.worker_count else 'ps' + str(task - self.worker_count) for task in range(1, self.task_count+1) ]
+        self.cpus_per_task = 4 
+        self.memory_per_task = 6 
         self.iterations = iterations
         self.interval = interval
+        self.tasks = self.setup_tasks()
+
+    def setup_tasks(self):
+        result = []
+        for taskidx in self.task_id:
+            is_ps = taskidx.startswith('ps')
+            needgpu = 1 if taskidx.startswith('worker') else 0
+            t = Task(self.job_id, taskidx, is_ps, self.cpus_per_task, self.memory_per_task, needgpu)
+            result.append(t)
+        return result
 
     def __eq__(self, other):
         result = (self.job_id == other.job_id)
@@ -89,6 +133,12 @@ class Job(object):
     def restart(self):
         self.running = True
         self.migration_count += 1
+    
+    def total_cpus_required(self):
+        return self.cpus_per_task * self.task_count
+    
+    def total_mem_required(self):
+        return self.memory_per_task * self.task_count
 
 class _TFJobs(object):
 

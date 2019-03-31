@@ -61,7 +61,7 @@ class JobQueueManager(object):
         duration = job_dict['duration']
         model = job_dict['model_name']
         interval = job_dict['interval']
-        num_gpus = job_dict['num_gpu']
+        num_gpus = int(job_dict['num_gpu'])
         submit_time = job_dict['submit_time']
         iterations = job_dict['iterations']
         return job.Job(idx, model, duration, iterations, interval, submit_time, gpu=num_gpus)
@@ -94,3 +94,6 @@ class JobQueueManager(object):
 
     def pop(self, queue_idx=0, job_in_queue=0):
         return self.queues[queue_idx].pop(job_in_queue)
+    
+    def insert(self, job, queue_idx=0, job_in_queue=0):
+        return self.queues[queue_idx].insert(job_in_queue, job)

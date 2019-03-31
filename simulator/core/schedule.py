@@ -102,6 +102,11 @@ class Scheduler(object):
         self.placement = infrastructure.flags.scheme
         self.schedule = infrastructure.flags.schedule
         self.finished_jobs = []
+        # TODO: 
+        # Scheduler should keep tracks of running jobs
+        # and which nodes are busy
+        self.running_jobs = []
+        self.busy_nodes = []
 
         # TODO: RL agent
         self.agent = None
@@ -118,7 +123,7 @@ class Scheduler(object):
         return sum([n.is_free() for n in all_nodes])
 
     def _schedule(self, delta):
-        result = algorithm.scheduling_algorithms[self.schedule](self, delta)
+        return algorithm.scheduling_algorithms[self.schedule](self, delta)
 
     def unfinished_node_count(self):
         nodes = self.collate_all_nodes()
@@ -132,11 +137,23 @@ class Scheduler(object):
                 if job.finished:
                     node.release_resources(job)
 
+    def add_to_running(self, node_id, job_id):
+        result = False
+        self.running_jobs.append(job_id)
+        self.busy_nodes.append(node_id)
+        nodes = self.collate_all_nodes()
+        for node in nodes:
+            if node.node_id == node_id:
+                result = node.execute_job(job_id)
+                break
+        return result
+
     def start(self):
         start_time = time.time()
         delta_time = 0
         current_remaining = self.jq_manager.total_jobs() 
-        self._schedule(delta_time)
+        result = self._schedule(delta_time)
+
         # while current_remaining > 0:
         #     # NOTE: Make decision on whether to:
         #     # 1. schedule new jobs

@@ -98,6 +98,9 @@ class Infrastructure(object):
 
         return result
 
+    def get_free_nodes(self):
+        return [node for node in self.nodes if node.is_free()]
+
     def get_available_mem_size(self):
         result = 0
         for node in self.nodes:
