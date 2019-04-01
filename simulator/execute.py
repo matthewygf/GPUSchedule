@@ -1,6 +1,7 @@
 import subprocess
 from subprocess import Popen
 import os
+import time
 
 # # Just a small script to run the bash script from PyCharm
 # placement=("yarn") 
@@ -32,9 +33,15 @@ def main():
         '--log_path', log_path
     ]
     p = Popen(cmd, cwd=os.getcwd(), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    poll = None    
+    pid = p.pid
+    print("process pid %d: " % pid)
+    while poll is None:
+        time.sleep(2)
+        poll = p.poll()
     stdout, stderr = p.communicate()
     print(stdout.decode('utf-8'))
     print(stderr.decode('utf-8'))
-
+    
 if __name__ == "__main__":
     main()

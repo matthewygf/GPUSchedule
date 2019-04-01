@@ -1,7 +1,4 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
+import copy
 from core import util
 
 '''
@@ -165,7 +162,6 @@ class _Node(object):
 
         return (cpu and gpu)
 
-
 class Node(object):
     def __init__(self, node_id, cpus=0, gpus=0, memory=0):
         self.node_id = str(node_id)
@@ -182,10 +178,6 @@ class Node(object):
         self.placed_jobs = {}
         self.running_tasks = {}
         self.placed_tasks = {}
-
-    def __eq__(self, other):
-        result = self.node_id == other.node_id
-        return result
 
     def get_network_usage(self):
         return self.network_usage
@@ -217,12 +209,24 @@ class Node(object):
     def is_free(self):
         return self.gpu_free() > 0 and self.cpu_free() > 0 and self.mem_free() > 0
 
-    def release_resources(self, job):
-        self.cpu_used -= job.cpu
-        self.gpu_used -= job.gpu
-        self.mem_used -= job.mem
-        assert self.jobs.__contains__(job), "Node did not contain the job specified"
-        self.jobs.remove(job)
+    def release_allocated_resources(self, job, placed_only=False):
+        """NOTE: release"""
+        # clear tasks
+        for t in iter(job.tasks.values()):
+            pop_t = self.placed_tasks.pop(t.task_id, None)
+            if pop_t is not None:
+                self.cpu_used -= pop_t.cpu
+                self.gpu_used -= pop_t.gpu
+                self.mem_used -= pop_t.mem
+        # assume task in the node is the main consumer
+        if placed_only:
+            self.placed_jobs.pop(job.job_id)
+            return True
+        else:
+            self.placed_jobs.pop(job.job_id, None)
+            #TODO:
+            # running jobs finished etc...
+        return False
 
     def can_fit_num_task(self, tasks):
         """
@@ -251,15 +255,11 @@ class Node(object):
         job_to_execute = self.placed_jobs.pop(job_id, None)
         if job_to_execute is None:
             raise ValueError()
-        job_task_id = []
-        for t in iter(job_to_execute.tasks.values()):
-            job_task_id.append(t.task_id)
-        for jt_idx in job_task_id:
+        for jt_idx in iter(job_to_execute.tasks.keys()):
             jt = self.placed_tasks.pop(jt_idx, None)
-            if jt is None:
-                raise ValueError()
-            jt.execute()
-            self.running_tasks[jt_idx] = jt
+            if jt is not None:
+                jt.execute()
+                self.running_tasks[jt_idx] = jt
         job_to_execute.execute()
         self.running_jobs[job_id] = job_to_execute 
         # NOTE: Assume if job in running jobs, then every tasks above is added.
@@ -270,18 +270,62 @@ class Node(object):
                         (self.node_id, len(self.running_tasks), len(self.running_jobs)))
         return result
 
-    def try_alloc_job(self, job):
+    def try_reserve_and_placed_task(self, task):
+        result = False
+        cpu_offset = self.cpu_free() - task.cpu
+        mem_offset = self.mem_free() - task.mem
+        gpu_offset = self.gpu_free() - task.gpu
+        result = (cpu_offset >= 0) and (mem_offset >= 0) and (gpu_offset >= 0)
+        if not result:
+            return result
+        self.cpu_used += task.cpu
+        self.mem_used += task.mem
+        self.gpu_used += task.gpu
+        self.placed_tasks[task.task_id] = task
+        return result
+
+    def try_reserve_and_placed_job(self, job, count_task_in_current_node=False):
+        """
+        NOTE: 
+            param:
+            count_task_in_current_node: if count_task_in_current_node is True, 
+            will count whether all the task in the job is in current node placed_tasks
+        """
+        found = False
+        for t in iter(job.tasks.keys()):
+            if t not in self.placed_tasks:
+                if not count_task_in_current_node:
+                    continue
+                else:
+                    return False
+            else:
+                #util.print_fn("Found at least 1 task %s, in node %s" % (t, self.node_id))
+                found = True
+                break
+        
+        self.placed_jobs[job.job_id] = job
+        return found
+
+    def try_alloc_job(self, job, is_single=False):
         """
         NOTE: right now this assume all tasks can fit then we placed the tasks and corresponding job.
         """
         result = False
         ps_tasks, worker_tasks = self.can_fit_num_task(job.tasks)
+
         if ps_tasks + worker_tasks >= job.task_count:
-            for t in iter(job.tasks.values()):
-                self.placed_tasks[t.task_id] = t
-            self.placed_jobs[job.job_id] = job
+            util.print_fn("node fit current job %s Trying to allocate job" % job.job_id)
+
+            copy_j = job.tasks.copy()
+            for t in iter(copy_j.values()):
+                result = self.try_reserve_and_placed_task(t)
+            result = self.try_reserve_and_placed_job(job, is_single)
+            if not result:
+                # Not executed yet
+                self.release_allocated_resources(job, placed_only=True)
+                util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
+                return result
             util.print_fn("placed job %s, tasks %d at node %s" % (job.job_id, len(job.tasks), self.node_id))
-            result = True
         else:
             util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
         return result

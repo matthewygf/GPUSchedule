@@ -91,23 +91,25 @@ class Job(object):
         self.gpus = gpu
         self.task_count = self.ps_count + self.worker_count
         self.task_id = ['worker' + str(task) if task <= self.worker_count else 'ps' + str(task - self.worker_count) for task in range(1, self.task_count+1) ]
-        self.cpus_per_task = 4 
-        self.memory_per_task = 6 
+        self.cpus_per_task = 4 # heuristic
+        self.memory_per_task = 6 # heuristic
         self.iterations = iterations
         self.interval = interval
         self.tasks = self.setup_tasks()
+    
+    def total_cpus_required(self):
+        return self.cpus_per_task * self.task_count
+
+    def total_mem_required(self):
+        return self.memory_per_task * self.task_count
 
     def setup_tasks(self):
         result = {}
         for taskidx in self.task_id:
             is_ps = taskidx.startswith('ps')
             needgpu = 1 if taskidx.startswith('worker') else 0
-            t = Task(self.job_id, taskidx, is_ps, self.cpus_per_task, self.memory_per_task, needgpu)
-            result[self.job_id+"_"+t.task_id] = t 
-        return result
-
-    def __eq__(self, other):
-        result = (self.job_id == other.job_id)
+            t = Task(self.job_id, self.job_id+"_"+taskidx, is_ps, self.cpus_per_task, self.memory_per_task, needgpu)
+            result[t.task_id] = t 
         return result
 
     def has_finished(self):
@@ -133,12 +135,6 @@ class Job(object):
     def restart(self):
         self.running = True
         self.migration_count += 1
-    
-    def total_cpus_required(self):
-        return self.cpus_per_task * self.task_count
-    
-    def total_mem_required(self):
-        return self.memory_per_task * self.task_count
 
 class _TFJobs(object):
 

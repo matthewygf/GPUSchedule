@@ -23,8 +23,8 @@ class Infrastructure(object):
     """
     def __init__(self, flags):
         self.flags = flags
-        self.racks = list()
-        self.nodes = list()
+        self.racks = {}
+        self.nodes = {}
         self.num_switch = self.flags.num_switch
         self.rack_bandwidth = self.flags.rack_bandwidth
         self.num_nodes_p_switch = self.flags.num_node_p_switch
@@ -64,18 +64,20 @@ class Infrastructure(object):
         f_handler.close()
 
         for rack_id in range(0, self.num_switch):
-            rack = r.Rack(rack_id, self.rack_bandwidth)
+            rack = r.Rack(str(rack_id), self.rack_bandwidth)
             for node_id in range(0, self.num_nodes_p_switch):
-                node = n.Node(node_id, self.num_cpu_p_node, self.num_gpu_p_node, self.mem_p_node)
-                self.nodes.append(node)
+                node = n.Node(str(node_id), self.num_cpu_p_node, self.num_gpu_p_node, self.mem_p_node)
+                self.nodes[str(node_id)] = node
                 rack.add_node(node)
-            self.racks.append(rack)
+            self.racks[str(rack_id)] = rack
 
         util.print_fn("num_racks in cluster: %d" % len(self.racks))
-        util.print_fn("num_node_p_rack in cluster: %d" % len(self.racks[-1].nodes))
-        util.print_fn("num_gpu_p_node in cluster: %d" % self.racks[-1].nodes[-1].gpu_count)
-        util.print_fn("num_cpu_p_node in cluster: %d" % self.racks[-1].nodes[-1].cpu_count)
-        util.print_fn("mem_p_node in cluster: %d" %  self.racks[-1].nodes[-1].mem_size)
+        first_rack = next(iter(self.racks.values()))
+        first_rack_first_node = next(iter(first_rack.nodes.values()))
+        util.print_fn("num_node_p_rack in cluster: %d" % len(first_rack.nodes))
+        util.print_fn("num_gpu_p_node in cluster: %d" % first_rack_first_node.gpu_count)
+        util.print_fn("num_cpu_p_node in cluster: %d" % first_rack_first_node.cpu_count)
+        util.print_fn("mem_p_node in cluster: %d" %  first_rack_first_node.mem_size)
         util.print_fn('--------------------------------- End of cluster spec ---------------------------------')
 
     def get_available_cpu_count(self):
@@ -87,23 +89,22 @@ class Infrastructure(object):
 
     def get_total_gpus(self):
         result = 0
-        for node in self.nodes:
+        for node in iter(self.nodes.values()):
             result += node.gpu_count
         return result
 
     def get_free_gpus(self):
         result = 0
-        for node in self.nodes:
+        for node in iter(self.nodes.values()):
             result += node.gpu_free()
 
         return result
 
     def get_free_nodes(self):
-        return [node for node in self.nodes if node.is_free()]
+        return [node for node in iter(self.nodes.values()) if node.is_free()]
 
     def get_available_mem_size(self):
         result = 0
-        for node in self.nodes:
+        for node in iter(self.nodes.values()):
             result += node.mem_free()
-
         return result

@@ -102,7 +102,6 @@ class Scheduler(object):
         self.placement = infrastructure.flags.scheme
         self.schedule = infrastructure.flags.schedule
         self.finished_jobs = []
-        # TODO: 
         # Scheduler should keep tracks of running jobs
         # and which nodes are busy
         self.running_jobs = []
@@ -120,51 +119,51 @@ class Scheduler(object):
 
     def num_free_nodes(self):
         all_nodes = self.collate_all_nodes()
-        return sum([n.is_free() for n in all_nodes])
+        return sum([n.is_free() for n in iter(all_nodes.values())])
 
     def _schedule(self, delta):
         return algorithm.scheduling_algorithms[self.schedule](self, delta)
 
     def unfinished_node_count(self):
         nodes = self.collate_all_nodes()
-        count = sum([not node.is_finished for node in nodes])
+        count = sum([not node.is_finished for node in iter(nodes.values())])
         return count
 
     def release_finished_jobs(self):
         nodes = self.collate_all_nodes()
-        for node in nodes:
+        for node in iter(nodes.values()):
             for job in node.jobs:
                 if job.finished:
                     node.release_resources(job)
 
-    def add_to_running(self, node_id, job_id):
+    def add_to_running(self, node_ids, job_id):
         result = False
         self.running_jobs.append(job_id)
-        self.busy_nodes.append(node_id)
         nodes = self.collate_all_nodes()
-        for node in nodes:
-            if node.node_id == node_id:
-                result = node.execute_job(job_id)
-                break
+        for idx in node_ids:
+            self.busy_nodes.append(idx)
+            result = nodes[idx].execute_job(job_id)
+            if not result:
+                return result
         return result
 
     def start(self):
         start_time = time.time()
         delta_time = 0
         current_remaining = self.jq_manager.total_jobs() 
-        result = self._schedule(delta_time)
-
-        # while current_remaining > 0:
-        #     # NOTE: Make decision on whether to:
-        #     # 1. schedule new jobs
-        #     # 2. preempt running jobs
-        #     # 3. migrate running jobs
-        #     self._schedule(delta_time)
-        #     self.release_finished_jobs()
-        #     end_time = time.time()
-        #     delta_time = end_time - start_time
-        #     start_time = end_time
-        #     current_remaining = self.jq_manager.total_jobs() 
+        while current_remaining > 50:
+            # NOTE: Make decision on whether to:
+            # 1. schedule new jobs
+            # 2. preempt running jobs
+            # 3. migrate running jobs
+            result = self._schedule(delta_time)
+            new_current_remaining = self.jq_manager.total_jobs() 
+            util.print_fn("Current remaining was %d, now is %d" % (current_remaining, new_current_remaining))
+            # self.release_finished_jobs()
+            end_time = time.time()
+            delta_time = end_time - start_time
+            start_time = end_time
+            current_remaining = new_current_remaining
 
     def sort_job_trace(self):
         for i, q in enumerate(self.jq_manager.queues):
