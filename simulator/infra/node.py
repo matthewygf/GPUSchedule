@@ -229,9 +229,10 @@ class Node(object):
         NOTE: CRITICAL STUFF
         return integer, -1 if can fit all tasks.
         """
-        worker_count = sum([1 for t in tasks if not t.is_ps])
-        cpu_per_task = tasks[0].cpu
-        mem_per_task = tasks[0].mem
+        worker_count = sum([1 for t in tasks.values() if not t.is_ps])
+        first_task = next(iter(tasks.values()))
+        cpu_per_task = first_task.cpu
+        mem_per_task = first_task.mem
 
         gpus_offset = self.gpu_free() - worker_count
         cpus_task_offset = (self.cpu_free() // cpu_per_task) - len(tasks)
@@ -251,8 +252,8 @@ class Node(object):
         if job_to_execute is None:
             raise ValueError()
         job_task_id = []
-        for t in job_to_execute.tasks:
-            job_task_id.append(job_id+"_"+t.task_id)
+        for t in iter(job_to_execute.tasks.values()):
+            job_task_id.append(t.task_id)
         for jt_idx in job_task_id:
             jt = self.placed_tasks.pop(jt_idx, None)
             if jt is None:
@@ -276,8 +277,8 @@ class Node(object):
         result = False
         ps_tasks, worker_tasks = self.can_fit_num_task(job.tasks)
         if ps_tasks + worker_tasks >= job.task_count:
-            for t in job.tasks:
-                self.placed_tasks[job.job_id+"_"+t.task_id] = t
+            for t in iter(job.tasks.values()):
+                self.placed_tasks[t.task_id] = t
             self.placed_jobs[job.job_id] = job
             util.print_fn("placed job %s, tasks %d at node %s" % (job.job_id, len(job.tasks), self.node_id))
             result = True

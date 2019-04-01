@@ -98,12 +98,12 @@ class Job(object):
         self.tasks = self.setup_tasks()
 
     def setup_tasks(self):
-        result = []
+        result = {}
         for taskidx in self.task_id:
             is_ps = taskidx.startswith('ps')
             needgpu = 1 if taskidx.startswith('worker') else 0
             t = Task(self.job_id, taskidx, is_ps, self.cpus_per_task, self.memory_per_task, needgpu)
-            result.append(t)
+            result[self.job_id+"_"+t.task_id] = t 
         return result
 
     def __eq__(self, other):

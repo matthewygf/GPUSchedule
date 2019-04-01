@@ -1,4 +1,5 @@
 import math
+import copy
 
 def ms_yarn_placement(scheduler, next_job):
     gpu_demand = next_job.gpus
@@ -50,38 +51,33 @@ def try_cross_node_alloc_ms(infrastructure, job):
     num_full_nodes = math.ceil(job.gpu / infrastructure.num_gpu_p_node)
     extra_node_gpu = job.gpu % infrastructure.num_gpu_p_node
 
-    nodes_assigned = []
-    to_be_assigned = job.tasks
+    nodes_assigned = {}
+    to_be_assigned = copy.deepcopy(job.tasks)
     for node in infrastructure.get_free_nodes():
-        assigned = False
 
-        if to_be_assigned == 0: break
+        if len(to_be_assigned) == 0: break
         
         # this is checking how many nodes can fit the job current remaining tasks.
         ps_tasks_can_fit, worker_tasks_can_fit = node.can_fit_num_task(to_be_assigned)
-        # NOTE: keep track of which task has been assigned.
-        tasks_index_assigned = []
 
         if ps_tasks_can_fit > 0:
-            for i, t in enumerate(to_be_assigned):
+            for t in iter(job.tasks.values()):
                 if t.task_id.startswith('ps'):
-                    node.tasks.append(t)
-                    tasks_index_assigned.append(i)
-                    assigned = True
+                    pop_t = to_be_assigned.pop(t.task_id, None)
+                    if pop_t is None:
+                        raise ValueError()
+                    node.placed_tasks[t.task_id] = pop_t
 
         if worker_tasks_can_fit > 0:
-            for i, t in enumerate(to_be_assigned):
+            for t in iter(job.tasks.values()):
                 if t.task_id.startswith('worker'):
-                    node.tasks.append(t)
-                    tasks_index_assigned.append(i)
+                    pop_t = to_be_assigned.pop(t.task_id, None)
+                    if pop_t is None:
+                        raise ValueError()
+                    node.placed_tasks[t.task_id] = pop_t
         
-        # remove the ones already got assigned.
-        for i in tasks_index_assigned:
-            to_be_assigned.pop(i)
-
-        if assigned:
-            node.jobs.append(job)
-            nodes_assigned.append(node)
+        node.placed_jobs[job.job_id] = job
+        nodes_assigned[node.node_id] = node
 
         if len(nodes_assigned) == num_full_nodes:
             break
@@ -89,13 +85,14 @@ def try_cross_node_alloc_ms(infrastructure, job):
     # if not enough, clear everything.
     if len(nodes_assigned) < num_full_nodes:
         nodes_assigned.clear()
-        node.jobs.clear()
-        node.tasks.clear()
+        node.placed_jobs.pop(job.job_id)
+        for t in iter(job.tasks.values()):
+            node.placed_tasks.pop(t.task_id)
         return [], 0, False 
     
     # TODO: NETWORK COSTS
     if len(nodes_assigned) == num_full_nodes:
-        return [n.node_id for n in nodes_assigned], 0, True
+        return [nodes_assigned.keys()], 0, True
 
 def try_single_node_alloc_ms(infrastructure, job):
     """
