@@ -34,8 +34,8 @@ class Task(object):
                  cpu=0,
                  mem=0,
                  gpu=0):
-        self.job_id = job_id
-        self.task_id = task_id
+        self.job_id = str(job_id)
+        self.task_id = str(task_id)
         self.is_ps = is_ps
         self.cpu = cpu
         self.mem = mem
@@ -73,7 +73,7 @@ class Job(object):
                  interval, 
                  submit_time,
                  gpu=0):
-        self.job_id = job_id
+        self.job_id = str(job_id)
         self.started = False
         self.running = False
         self.finished = False

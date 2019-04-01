@@ -4,8 +4,8 @@ def ms_yarn_placement(scheduler, next_job):
     gpu_demand = next_job.gpus
     success = False
     network_traffics = 0
-    try_alloc = try_cross_node_alloc if gpu_demand > scheduler.infrastructure.num_gpu_p_node else try_single_node_alloc
-    node_ids, network_costs, success = try_alloc(scheduler.infrastructure, next_job)
+    try_alloc_ms = try_cross_node_alloc_ms if gpu_demand > scheduler.infrastructure.num_gpu_p_node else try_single_node_alloc_ms
+    node_ids, network_costs, success = try_alloc_ms(scheduler.infrastructure, next_job)
     network_traffics += network_costs
     return node_ids, network_costs, success
 
@@ -38,7 +38,7 @@ scheduling_algorithms = {
     'fifo': schedule_fifo
 }
 
-def try_cross_node_alloc(infrastructure, job):
+def try_cross_node_alloc_ms(infrastructure, job):
     """
     From Tiresias:
     try get gpus from multiple nodes
@@ -97,7 +97,7 @@ def try_cross_node_alloc(infrastructure, job):
     if len(nodes_assigned) == num_full_nodes:
         return [n.node_id for n in nodes_assigned], 0, True
 
-def try_single_node_alloc(infrastructure, job):
+def try_single_node_alloc_ms(infrastructure, job):
     """
     From Tiresias:
     try get gpus from a single node,

@@ -168,7 +168,7 @@ class _Node(object):
 
 class Node(object):
     def __init__(self, node_id, cpus=0, gpus=0, memory=0):
-        self.node_id = node_id
+        self.node_id = str(node_id)
         self.cpu_count = cpus
         self.gpu_count = gpus
         self.mem_size = memory
@@ -178,10 +178,10 @@ class Node(object):
         self.gpu_used = 0
         self.mem_used = 0
 
-        self.running_jobs = []
-        self.placed_jobs = []
-        self.running_tasks = []
-        self.placed_tasks = []
+        self.running_jobs = {}
+        self.placed_jobs = {}
+        self.running_tasks = {}
+        self.placed_tasks = {}
 
     def __eq__(self, other):
         result = self.node_id == other.node_id
@@ -247,38 +247,39 @@ class Node(object):
         result = False
         started_jobs = []
         started_tasks = []
-        for i, job in enumerate(self.placed_jobs):
-            if job.job_id == job_id:
-                for j, t in enumerate(self.placed_tasks):
-                    if t.job_id == job_id:
-                        t.execute()
-                        started_tasks.append(j)
-                        self.running_tasks.append(t)    
-                job.execute()
-                self.running_jobs.append(job)
-                started_jobs.append(i)
-                break
-
-        for idx in started_tasks:
-            self.placed_tasks.pop(idx)
-
-        for idx in started_jobs:
-            self.placed_jobs.pop(idx)
-            result = True
-
-        util.print_fn("node %d, total len of placed tasks: %d, total len of placed jobs %d" % 
+        job_to_execute = self.placed_jobs.pop(job_id, None)
+        if job_to_execute is None:
+            raise ValueError()
+        job_task_id = []
+        for t in job_to_execute.tasks:
+            job_task_id.append(job_id+"_"+t.task_id)
+        for jt_idx in job_task_id:
+            jt = self.placed_tasks.pop(jt_idx, None)
+            if jt is None:
+                raise ValueError()
+            jt.execute()
+            self.running_tasks[jt_idx] = jt
+        job_to_execute.execute()
+        self.running_jobs[job_id] = job_to_execute 
+        # NOTE: Assume if job in running jobs, then every tasks above is added.
+        result = (job_id in self.running_jobs)
+        util.print_fn("node %s, total len of placed tasks: %d, total len of placed jobs %d" % 
                         (self.node_id, len(self.placed_tasks), len(self.placed_jobs)))
-        util.print_fn("node %d, total len of running tasks: %d, total len of running jobs %d" % 
+        util.print_fn("node %s, total len of running tasks: %d, total len of running jobs %d" % 
                         (self.node_id, len(self.running_tasks), len(self.running_jobs)))
         return result
 
     def try_alloc_job(self, job):
+        """
+        NOTE: right now this assume all tasks can fit then we placed the tasks and corresponding job.
+        """
         result = False
         ps_tasks, worker_tasks = self.can_fit_num_task(job.tasks)
         if ps_tasks + worker_tasks >= job.task_count:
-            self.placed_jobs.append(job)
-            self.placed_tasks = self.placed_tasks + job.tasks
-            util.print_fn("placed job %d, tasks %d at node %d" % (job.job_id, len(job.tasks), self.node_id))
+            for t in job.tasks:
+                self.placed_tasks[job.job_id+"_"+t.task_id] = t
+            self.placed_jobs[job.job_id] = job
+            util.print_fn("placed job %s, tasks %d at node %s" % (job.job_id, len(job.tasks), self.node_id))
             result = True
         else:
             util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
