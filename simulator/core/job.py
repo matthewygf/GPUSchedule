@@ -1,8 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-
 '''
 JOB status:
 ADDED: add job into JOBS
@@ -17,7 +12,7 @@ import math
 from core import util
 from core import models
 from core import resource_requirment as rq
-
+from model import model_factory
 import csv
 import time
 import sys
@@ -84,7 +79,7 @@ class Job(object):
         self.model = model
         # TODO: 
         # Have a dictionary to map the size of the model.
-        self.model_size = 0
+        self.model_size = model_factory.model_sizes[model]
         self.migration_count = 0
         self.ps_count = gpu // 4 if gpu > 1 else 0
         self.worker_count = gpu 
