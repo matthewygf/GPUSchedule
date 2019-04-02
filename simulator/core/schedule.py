@@ -151,7 +151,7 @@ class Scheduler(object):
         start_time = time.time()
         delta_time = 0
         current_remaining = self.jq_manager.total_jobs() 
-        while current_remaining > 50:
+        while current_remaining > 56:
             # NOTE: Make decision on whether to:
             # 1. schedule new jobs
             # 2. preempt running jobs

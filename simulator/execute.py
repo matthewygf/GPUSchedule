@@ -3,19 +3,6 @@ from subprocess import Popen
 import os
 import time
 
-# # Just a small script to run the bash script from PyCharm
-# placement=("yarn") 
-# #schedule=("fifo" "fjf" "sjf" "shortest" "shortest-gpu" "dlas" "dlas-gpu")
-# #schedule=("dlas" "dlas-gpu" "dlas-gpu-100" "dlas-gpu-8" "dlas-gpu-4" "dlas-gpu-2" "dlas-gpu-1" "dlas-gpu-05")
-# # schedule=("dlas-gpu")
-# schedule=("gandiva")
-# #schedule=("shortest-gpu")
-# #schedule=("dlas" "dlas-gpu")
-# # schedule=("dlas-gpu-05")
-# # schedule=("dlas-gpu-1" "dlas-gpu-2" "dlas-gpu-4" "dlas-gpu-8" "dlas-gpu-10" "dlas-gpu-100" "dlas-gpu-1000")
-# #schedule=("fifo")
-# jobs=("60")
-# setups=("n4g4")
 
 def main():
     cluster_spec = 'n4g4'
@@ -23,22 +10,23 @@ def main():
     scheme = 'yarn'
     schedule = 'fifo'
     log_path = cluster_spec + "_job_" + trace_file + "/" +scheme + "_" + schedule
-
+    python_ex = 'python.exe' if os.name == 'nt' else 'python3'
     cmd = [
-        'python.exe', 'run_sim.py',
+        python_ex, 'run_sim.py',
         '--cluster_spec', cluster_spec+'.csv',
         '--scheme', scheme,
         '--trace_file', trace_file+'_job.csv',
         '--schedule', schedule,
         '--log_path', log_path
     ]
-    p = Popen(cmd, cwd=os.getcwd(), stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    p = Popen(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     poll = None    
     pid = p.pid
     print("process pid %d: " % pid)
     while poll is None:
         time.sleep(2)
         poll = p.poll()
+        print("process pid %d still running" % pid)
     stdout, stderr = p.communicate()
     print(stdout.decode('utf-8'))
     print(stderr.decode('utf-8'))
