@@ -1,14 +1,13 @@
 import math
 import copy
 from core import util
+from infra import network_service
 
 def ms_yarn_placement(scheduler, next_job):
     gpu_demand = next_job.gpus
     success = False
-    network_traffics = 0
     try_alloc_ms = try_cross_node_alloc_ms if gpu_demand > scheduler.infrastructure.num_gpu_p_node else try_single_node_alloc_ms
     node_ids, network_costs, success = try_alloc_ms(scheduler.infrastructure, next_job)
-    network_traffics += network_costs
     return node_ids, network_costs, success
 
 placement_algorithms = {
@@ -19,7 +18,7 @@ def network_costs_update(network_costs, job):
     """NOTE: cross rack network_costs"""
     pass
 
-def schedule_fifo(scheduler, delta):
+def schedule_fifo(scheduler, delta, pending_time, pending_count):
     """NOTE: First in first out, does not preempt or migrate"""
     placement = placement_algorithms[scheduler.placement]
     # check if there is any node available
@@ -29,6 +28,7 @@ def schedule_fifo(scheduler, delta):
         return
     # F in F out, get the first job from the queue
     next_job = scheduler.jq_manager.pop()
+    assert next_job.is_waiting()
     node_ids, network_costs, success = placement(scheduler, next_job)
     if success:
         # AT THIS POINT: THIS ACTUALLY RUN THE JOB.
@@ -36,6 +36,9 @@ def schedule_fifo(scheduler, delta):
     else:
         next_job.pending_time += delta
         scheduler.jq_manager.insert(next_job, job_in_queue=0)
+        pending_time = ((pending_time*pending_count) + delta)/ (pending_count + 1)
+        pending_count += 1
+    return pending_time, pending_count
 
 scheduling_algorithms = {
     'fifo': schedule_fifo,
@@ -56,19 +59,15 @@ def try_cross_node_alloc_ms(infrastructure, job):
 
     nodes_assigned = {}
     to_be_assigned = copy.deepcopy(job.tasks)
-    print(to_be_assigned.keys())
     num_full_tasks = len(job.tasks)
     assigned_task = 0
-
     for node in infrastructure.get_free_nodes():
-        util.print_fn("to_be_assigned %d" % len(to_be_assigned))
         copy_to_be_assigned = to_be_assigned.copy()
         if len(copy_to_be_assigned) == 0: break
         
         # this is checking how many nodes can fit the job current remaining tasks.
         ps_tasks_can_fit, worker_tasks_can_fit = node.can_fit_num_task(to_be_assigned)
 
-        # can fit at least some amount of ps and worker tasks
         ps_count = 0
         worker_count = 0
         for t in iter(copy_to_be_assigned.values()):
@@ -90,7 +89,6 @@ def try_cross_node_alloc_ms(infrastructure, job):
                 # from a job perspective keep track of where my tasks are
                 job.tasks_running_on[pop_t.task_id] = node.node_id
                 assigned_task += 1
-                util.print_fn("found placement for task %s in node %s" % (t.task_id, node.node_id))
         
         # at least we have some task in the node.
         if ps_count > 0 or worker_count > 0:        
@@ -103,9 +101,8 @@ def try_cross_node_alloc_ms(infrastructure, job):
             break
     
     # if not enough, clear everything.
+    # NOTE: all tasks need to be assigned!!!
     if len(nodes_assigned) < num_full_nodes or assigned_task < num_full_tasks:
-        util.print_fn("Needed %d: have nodes %d Not enough nodes to satisfied job %s, num of tasks remain to be assigned %d" % 
-                        (num_full_nodes, len(nodes_assigned), job.job_id, len(to_be_assigned)))
         for node in iter(nodes_assigned.values()):
             node.placed_jobs.pop(job.job_id)
             for t in iter(job.tasks.values()):
@@ -115,6 +112,7 @@ def try_cross_node_alloc_ms(infrastructure, job):
     
     # TODO: NETWORK COSTS
     if len(nodes_assigned) >= num_full_nodes and assigned_task == num_full_tasks:
+        #network_service.calculate_network_costs()
         return list(nodes_assigned.keys()), 0, True
     raise ArithmeticError()
 

@@ -211,25 +211,30 @@ class Node(object):
         return result
 
     def is_free(self):
-        return self.gpu_free() > 0 and self.cpu_free() > 0 and self.mem_free() > 0
+        return self.gpu_free() >= 0 or self.cpu_free() >= 0 or self.mem_free() >= 0
+
+    def _release_from_tasks(self, tasks, placed_only=False):
+        for t in iter(tasks.copy().values()):
+            if placed_only:
+                pop_t = self.placed_tasks.pop(t.task_id)
+            else:
+                # we already dealt with, just released it.
+                pop_t = t
+            self.cpu_used -= pop_t.cpu
+            self.gpu_used -= pop_t.gpu
+            self.mem_used -= pop_t.mem
 
     def release_allocated_resources(self, job, placed_only=False):
         """NOTE: release"""
         # clear tasks
-        for t in iter(job.tasks.values()):
-            pop_t = self.placed_tasks.pop(t.task_id, None)
-            if pop_t is not None:
-                self.cpu_used -= pop_t.cpu
-                self.gpu_used -= pop_t.gpu
-                self.mem_used -= pop_t.mem
+        self._release_from_tasks(job.tasks, placed_only)
         # assume task in the node is the main consumer
         if placed_only:
             self.placed_jobs.pop(job.job_id)
             return True
         else:
-            self.placed_jobs.pop(job.job_id, None)
-            #TODO:
-            # running jobs finished etc...
+            self.running_jobs.pop(job.job_id)
+            return True
         return False
 
     def can_fit_num_task(self, tasks):
@@ -288,7 +293,7 @@ class Node(object):
                         j.tasks_running_on.pop(t_id)
                 result = j.try_finished()
                 if result:
-                    results.append(j.job_id)
+                    results.append(j)
         return results
 
     def calculate_utilization(self):

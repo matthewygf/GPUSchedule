@@ -111,19 +111,13 @@ class Job(object):
             result[t.task_id] = t 
         return result
 
-    def has_finished(self):
-        return self.finished
-
     def is_waiting(self):
-        result = self.started and not self.is_running
+        result = not self.started and not self.running
         return result
-
-    def on_queue(self):
-        result = not self.started
+    
+    def is_preempted(self):
+        result = self.started and not self.running
         return result
-
-    def is_running(self):
-        return self.running
 
     def task_finished(self, t_id):
         if t_id in self.tasks:

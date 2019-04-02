@@ -120,8 +120,8 @@ class Scheduler(object):
         all_nodes = self.collate_all_nodes()
         return sum([n.is_free() for n in iter(all_nodes.values())])
 
-    def _schedule(self, delta):
-        return algorithm.scheduling_algorithms[self.schedule](self, delta)
+    def _schedule(self, *args):
+        return algorithm.scheduling_algorithms[self.schedule](self, *args)
 
     def unfinished_node_count(self):
         nodes = self.collate_all_nodes()
@@ -133,8 +133,8 @@ class Scheduler(object):
             busy_node = self.infrastructure.nodes[node_id]
             finished_jobs_in_nodes = busy_node.try_finished_jobs(current_time)
             for fj in finished_jobs_in_nodes:
-                self.jobs_finished[fj] = True
-                busy_node.running_jobs.pop(fj)
+                self.jobs_finished[fj.job_id] = True
+                assert busy_node.release_allocated_resources(fj)
 
     def add_to_running(self, node_ids, job_id):
         result = False
@@ -152,20 +152,27 @@ class Scheduler(object):
         delta_time = 0
         current_remaining = self.jq_manager.total_jobs()
         running_jobs = len([v for k, v in self.jobs_finished.items() if not v])
-        while current_remaining + running_jobs > 56:
+        steps = 0
+        pending_time, pending_count = 0,0
+        while current_remaining + running_jobs > 0:
             # NOTE: Make decision on whether to:
-            # 1. schedule new jobs
-            # 2. preempt running jobs
-            # 3. migrate running jobs
-            self._schedule(delta_time)
+            # 1. Done: schedule new jobs 
+            # 2. TODO: preempt running jobs 
+            # 3. TODO: migrate running jobs
+            pending_time, pending_count = self._schedule(delta_time, pending_time, pending_count)
             new_current_remaining = self.jq_manager.total_jobs() 
-            #util.print_fn("Current remaining was %d, now is %d" % (current_remaining, new_current_remaining))
             end_time = time.time()
             self.release_finished_jobs(end_time)
             delta_time = end_time - start_time
             start_time = end_time
             current_remaining = new_current_remaining
             running_jobs = len([v for k, v in self.jobs_finished.items() if not v])
+            steps += 1
+            if (delta_time>=180) and ((delta_time % 180) == 0):
+                util.print_fn("Average pending seconds for all job is %d, Remaining jobs: %d, Running Jobs: %d " % (pending_time, new_current_remaining, running_jobs))
+        finished_time = time.time()
+        Total_time_taken = finished_time - start_time
+        util.print_fn("Total Time Taken in seconds: %d" % total_time_taken)
 
     def sort_job_trace(self):
         for i, q in enumerate(self.jq_manager.queues):

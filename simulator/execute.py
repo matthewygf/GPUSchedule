@@ -23,7 +23,7 @@ def main():
     pid = p.pid
     print("process pid %d: " % pid)
     while poll is None:
-        time.sleep(2)
+        time.sleep(5)
         poll = p.poll()
         print("process pid %d still running" % pid)
     
