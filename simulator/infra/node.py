@@ -176,10 +176,14 @@ class Node(object):
 
         self.running_jobs = {}
         self.placed_jobs = {}
+        # all tasks are deep copied so can be safely deleted upon finished
         self.running_tasks = {}
         self.placed_tasks = {}
 
+        self.finished_jobs = {}
+
     def get_network_usage(self):
+        # assumed the jjob can 
         return self.network_usage
 
     def check_util(self):
@@ -269,6 +273,33 @@ class Node(object):
         util.print_fn("node %s, total len of running tasks: %d, total len of running jobs %d" % 
                         (self.node_id, len(self.running_tasks), len(self.running_jobs)))
         return result
+    
+    def try_finished_jobs(self, current_time):
+        results = []
+        for j in iter(self.running_jobs.values()):
+            duration = current_time - j.start_time
+            if duration >= j.duration:
+                util.print_fn("Node %s : job %s is trying to be finished" % (self.node_id, j.job_id))
+                # iterate over task within the job
+                for t_id, n_id in iter(j.tasks_running_on.copy().items()):
+                    if n_id == self.node_id:
+                        self.running_tasks.pop(t_id, None)
+                        j.task_finished(t_id)
+                        j.tasks_running_on.pop(t_id)
+                result = j.try_finished()
+                if result:
+                    results.append(j.job_id)
+        return results
+
+    def calculate_utilization(self):
+        """
+        TODO: 
+        Each model has a particular utilization we sampled from a range.
+        Only used for Gandiva, Our Scheduler
+        return:
+            a tuple, each entry represent a gpu utilization.
+        """
+        return (0.0, 0.0, 0.0, 0.0)        
 
     def try_reserve_and_placed_task(self, task):
         result = False
@@ -319,6 +350,8 @@ class Node(object):
             copy_j = job.tasks.copy()
             for t in iter(copy_j.values()):
                 result = self.try_reserve_and_placed_task(t)
+                if result:
+                    job.tasks_running_on[t.task_id] = self.node_id
             result = self.try_reserve_and_placed_job(job, is_single)
             if not result:
                 # Not executed yet

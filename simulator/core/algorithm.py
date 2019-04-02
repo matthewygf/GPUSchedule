@@ -25,7 +25,8 @@ def schedule_fifo(scheduler, delta):
     # check if there is any node available
     num_free = scheduler.num_free_nodes()
     if num_free <= 0:
-        return False
+        #util.print_fn("Everything is full")
+        return
     # F in F out, get the first job from the queue
     next_job = scheduler.jq_manager.pop()
     node_ids, network_costs, success = placement(scheduler, next_job)
@@ -86,6 +87,8 @@ def try_cross_node_alloc_ms(infrastructure, job):
                     # re-insert
                     to_be_assigned[pop_t.task_id] = pop_t
                     continue
+                # from a job perspective keep track of where my tasks are
+                job.tasks_running_on[pop_t.task_id] = node.node_id
                 assigned_task += 1
                 util.print_fn("found placement for task %s in node %s" % (t.task_id, node.node_id))
         

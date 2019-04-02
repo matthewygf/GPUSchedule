@@ -21,10 +21,13 @@ import os
 class Task(object):
     """NOTE: 
     each job can have multiple tasks, 
-    each task can be identified from job_id"""
+    each task can be identified from job_id
+    assume each task from the same job has the same duration time.
+    """
     def __init__(self, 
                  job_id,
                  task_id,
+                 duration,
                  is_ps=False,
                  cpu=0,
                  mem=0,
@@ -73,12 +76,11 @@ class Job(object):
         self.running = False
         self.finished = False
         self.start_time = 0
-        self.duration = duration
+        self.duration = int(duration)
         self.submit_time = submit_time
         self.pending_time = 0
         self.model = model
-        # TODO: 
-        # Have a dictionary to map the size of the model.
+        # TODO: Network problem
         self.model_size = model_factory.model_sizes[model]
         self.migration_count = 0
         self.ps_count = gpu // 4 if gpu > 1 else 0
@@ -90,6 +92,8 @@ class Job(object):
         self.memory_per_task = 6 # heuristic
         self.iterations = iterations
         self.interval = interval
+        self.tasks_running_on = {}
+        self.tasks_finished = 0
         self.tasks = self.setup_tasks()
     
     def total_cpus_required(self):
@@ -103,7 +107,7 @@ class Job(object):
         for taskidx in self.task_id:
             is_ps = taskidx.startswith('ps')
             needgpu = 1 if taskidx.startswith('worker') else 0
-            t = Task(self.job_id, self.job_id+"_"+taskidx, is_ps, self.cpus_per_task, self.memory_per_task, needgpu)
+            t = Task(self.job_id, self.job_id+"_"+taskidx, self.duration, is_ps, self.cpus_per_task, self.memory_per_task, needgpu)
             result[t.task_id] = t 
         return result
 
@@ -120,6 +124,20 @@ class Job(object):
 
     def is_running(self):
         return self.running
+
+    def task_finished(self, t_id):
+        if t_id in self.tasks:
+            util.print_fn("task %s finished" % t_id)
+            self.tasks_finished += 1
+
+    def try_finished(self):
+        # job wasn't deep copied to multiple nodes
+        if self.tasks_finished == self.task_count:
+            util.print_fn("job %s finished" % self.job_id)
+            self.running = False
+            self.finished = True
+            return True
+        return False
 
     def execute(self):
         self.start_time = time.time()

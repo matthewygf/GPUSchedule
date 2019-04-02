@@ -101,10 +101,9 @@ class Scheduler(object):
         self.jq_manager = jobqueuemanager
         self.placement = infrastructure.flags.scheme
         self.schedule = infrastructure.flags.schedule
-        self.finished_jobs = []
         # Scheduler should keep tracks of running jobs
         # and which nodes are busy
-        self.running_jobs = []
+        self.jobs_finished = {}
         self.busy_nodes = []
 
         # TODO: RL agent
@@ -129,16 +128,17 @@ class Scheduler(object):
         count = sum([not node.is_finished for node in iter(nodes.values())])
         return count
 
-    def release_finished_jobs(self):
-        nodes = self.collate_all_nodes()
-        for node in iter(nodes.values()):
-            for job in node.jobs:
-                if job.finished:
-                    node.release_resources(job)
+    def release_finished_jobs(self, current_time):
+        for node_id in self.busy_nodes:
+            busy_node = self.infrastructure.nodes[node_id]
+            finished_jobs_in_nodes = busy_node.try_finished_jobs(current_time)
+            for fj in finished_jobs_in_nodes:
+                self.jobs_finished[fj] = True
+                busy_node.running_jobs.pop(fj)
 
     def add_to_running(self, node_ids, job_id):
         result = False
-        self.running_jobs.append(job_id)
+        self.jobs_finished[job_id] = False
         nodes = self.collate_all_nodes()
         for idx in node_ids:
             self.busy_nodes.append(idx)
@@ -150,20 +150,22 @@ class Scheduler(object):
     def start(self):
         start_time = time.time()
         delta_time = 0
-        current_remaining = self.jq_manager.total_jobs() 
-        while current_remaining > 56:
+        current_remaining = self.jq_manager.total_jobs()
+        running_jobs = len([v for k, v in self.jobs_finished.items() if not v])
+        while current_remaining + running_jobs > 56:
             # NOTE: Make decision on whether to:
             # 1. schedule new jobs
             # 2. preempt running jobs
             # 3. migrate running jobs
-            result = self._schedule(delta_time)
+            self._schedule(delta_time)
             new_current_remaining = self.jq_manager.total_jobs() 
-            util.print_fn("Current remaining was %d, now is %d" % (current_remaining, new_current_remaining))
-            # self.release_finished_jobs()
+            #util.print_fn("Current remaining was %d, now is %d" % (current_remaining, new_current_remaining))
             end_time = time.time()
+            self.release_finished_jobs(end_time)
             delta_time = end_time - start_time
             start_time = end_time
             current_remaining = new_current_remaining
+            running_jobs = len([v for k, v in self.jobs_finished.items() if not v])
 
     def sort_job_trace(self):
         for i, q in enumerate(self.jq_manager.queues):
