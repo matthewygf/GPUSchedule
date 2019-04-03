@@ -77,8 +77,8 @@ class Job(object):
         self.finished = False
         self.start_time = 0
         self.duration = int(duration)
-        self.submit_time = submit_time
-        self.pending_time = 0
+        self.submit_time = int(submit_time)
+        self.pending_time = 0.0
         self.model = model
         # TODO: Network problem
         self.model_size = model_factory.model_sizes[model]
@@ -136,11 +136,22 @@ class Job(object):
             return True
         return False
 
-    def execute(self):
-        self.start_time = time.time()
-        self.migration_count += 1
-        self.started = True
-        self.running = True
+    def try_execute(self):
+        """
+        only execute when all tasks are executing
+        """
+        executed_tasks_count = 0
+        for k, v in iter(self.tasks.items()):
+            if v.running and not v.finished:
+                executed_tasks_count += 1
+
+        if executed_tasks_count == self.task_count:
+            self.start_time = time.time()
+            self.migration_count += 1
+            self.started = True
+            self.running = True
+            return True, executed_tasks_count
+        return False, executed_tasks_count
 
     def restart(self):
         self.running = True

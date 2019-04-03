@@ -175,13 +175,12 @@ class Node(object):
         self.gpu_used = 0
         self.mem_used = 0
 
-        self.running_jobs = {}
-        self.placed_jobs = {}
-        # all tasks are deep copied so can be safely deleted upon finished
+        # NOTE: all tasks are deep copied so can be safely deleted upon finished
+        # we just wanted to keep track of the running tasks, 
+        # and the placed_jobs was for tracking
         self.running_tasks = {}
         self.placed_tasks = {}
-
-        self.finished_jobs = {}
+        self.placed_jobs = {}
 
     def get_network_usage(self):
         # assumed the jjob can 
@@ -215,31 +214,15 @@ class Node(object):
     def is_free(self):
         return self.gpu_free() > 0 or self.cpu_free() > 0 or self.mem_free() > 0
 
-    def _release_from_tasks(self, job, placed_only=False):
-        for t in iter(job.tasks.copy().values()):
-            if placed_only:
-                pop_t = self.placed_tasks.pop(t.task_id)
-            else:
-                pop_t = self.running_tasks.pop(t.task_id, None)
-            if pop_t is not None:
-                job.tasks_running_on.pop(t.task_id)
-                self.cpu_used -= pop_t.cpu
-                self.gpu_used -= pop_t.gpu
-                assert self.gpu_used >= 0
-                self.mem_used -= pop_t.mem
-
-    def release_allocated_resources(self, job, placed_only=False):
+    def release_allocated_resources(self, task):
         """NOTE: release"""
         # clear tasks
-        self._release_from_tasks(job, placed_only)
-        # assume task in the node is the main consumer
-        if placed_only:
-            self.placed_jobs.pop(job.job_id)
-            return True
-        else:
-            self.running_jobs.pop(job.job_id)
-            return True
-        return False
+        assert task.finished
+        self.cpu_used -= task.cpu
+        self.gpu_used -= task.gpu
+        assert self.gpu_used >= 0
+        self.mem_used -= task.mem
+        return True
 
     def can_fit_num_task(self, tasks):
         """
@@ -262,41 +245,22 @@ class Node(object):
 
     def execute_job(self, job_id):
         # check placed tasks in current node that is correspond to same job_id
-        result = False
         started_jobs = []
         started_tasks = []
+        started_task_count = 0
         job_to_execute = self.placed_jobs.pop(job_id, None)
         if job_to_execute is None:
             raise ValueError()
-        for jt_idx in iter(job_to_execute.tasks.keys()):
-            jt = self.placed_tasks.pop(jt_idx, None)
-            if jt is not None:
+        
+        for k, v in iter(job_to_execute.tasks_running_on.items()):
+            if v == self.node_id:
+                jt = self.placed_tasks.pop(k)
                 jt.execute()
-                self.running_tasks[jt_idx] = jt
-        job_to_execute.execute()
-        self.running_jobs[job_id] = job_to_execute 
-        # NOTE: Assume if job in running jobs, then every tasks above is added.
-        result = (job_id in self.running_jobs)
-        util.print_fn("node %s, total len of placed tasks: %d, total len of placed jobs %d" % 
-                        (self.node_id, len(self.placed_tasks), len(self.placed_jobs)))
-        util.print_fn("node %s, total len of running tasks: %d, total len of running jobs %d" % 
-                        (self.node_id, len(self.running_tasks), len(self.running_jobs)))
-        return result
-    
-    def try_finished_jobs(self, current_time):
-        results = []
-        for j in iter(self.running_jobs.values()):
-            duration = current_time - j.start_time
-            if duration >= j.duration:
-                util.print_fn("Node %s : job %s is trying to be finished" % (self.node_id, j.job_id))
-                # iterate over task within the job
-                for t_id, n_id in iter(j.tasks_running_on.items()):
-                    if n_id == self.node_id:
-                        j.task_finished(t_id)
-                result = j.try_finished()
-                if result:
-                    results.append(j)
-        return results
+                self.running_tasks[k] = jt
+        result, started_task_count = job_to_execute.try_execute()
+        if result:
+            return job_to_execute, started_task_count
+        return None, started_task_count
 
     def calculate_utilization(self):
         """

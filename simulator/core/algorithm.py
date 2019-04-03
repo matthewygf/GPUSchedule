@@ -2,13 +2,13 @@ import math
 import copy
 from core import util
 from infra import network_service
-
+#TODO: GANDIVA, TOPOLOGY 
 def ms_yarn_placement(scheduler, next_job):
     gpu_demand = next_job.gpus
     success = False
     try_alloc_ms = try_cross_node_alloc_ms if gpu_demand > scheduler.infrastructure.num_gpu_p_node else try_single_node_alloc_ms
-    node_ids, network_costs, success = try_alloc_ms(scheduler.infrastructure, next_job)
-    return node_ids, network_costs, success
+    nodes, network_costs, success = try_alloc_ms(scheduler.infrastructure, next_job)
+    return nodes, network_costs, success
 
 placement_algorithms = {
     'yarn': ms_yarn_placement 
@@ -18,7 +18,7 @@ def network_costs_update(network_costs, job):
     """NOTE: cross rack network_costs"""
     pass
 
-def schedule_fifo(scheduler, delta, pending_time, pending_count):
+def schedule_fifo(scheduler, delta):
     """NOTE: First in first out, does not preempt or migrate"""
     placement = placement_algorithms[scheduler.placement]
     # check if there is any node available
@@ -27,18 +27,17 @@ def schedule_fifo(scheduler, delta, pending_time, pending_count):
         #util.print_fn("Everything is full")
         return
     # F in F out, get the first job from the queue
-    next_job = scheduler.jq_manager.pop()
+    next_job = scheduler.jobs_manager.pop(delta)
+    if next_job is None:
+        return
     assert next_job.is_waiting()
-    node_ids, network_costs, success = placement(scheduler, next_job)
+    nodes, network_costs, success = placement(scheduler, next_job)
     if success:
         # AT THIS POINT: THIS ACTUALLY RUN THE JOB.
-        assert scheduler.add_to_running(node_ids, next_job.job_id), "Couldn't allocate the job"
+        scheduler.add_to_running(nodes, next_job.job_id)
     else:
         next_job.pending_time += delta
-        scheduler.jq_manager.insert(next_job, job_in_queue=0)
-        pending_time = ((pending_time*pending_count) + delta)/ (pending_count + 1)
-        pending_count += 1
-    return pending_time, pending_count
+        scheduler.jobs_manager.insert(next_job, job_in_queue=0)
 
 scheduling_algorithms = {
     'fifo': schedule_fifo,
@@ -54,28 +53,31 @@ def try_cross_node_alloc_ms(infrastructure, job):
     """
     # if someone decide to have 5 gpus but we have 4 per node,
     # we assigned 2 full node.
-    num_full_nodes = math.ceil(job.gpus / infrastructure.num_gpu_p_node)
+    least_num_full_nodes = math.ceil(job.gpus / infrastructure.num_gpu_p_node)
     extra_node_gpu = job.gpus % infrastructure.num_gpu_p_node
 
     nodes_assigned = {}
-    to_be_assigned = copy.deepcopy(job.tasks)
+    to_be_assigned = job.tasks.copy()
     num_full_tasks = len(job.tasks)
-    assigned_task = 0
+    assigned_task = {}
     for node in infrastructure.get_free_nodes():
-        copy_to_be_assigned = to_be_assigned.copy()
-        if len(copy_to_be_assigned) == 0: break
+        if len(assigned_task) == len(to_be_assigned): break
         
         # this is checking how many nodes can fit the job current remaining tasks.
         ps_tasks_can_fit, worker_tasks_can_fit = node.can_fit_num_task(to_be_assigned)
 
         ps_count = 0
         worker_count = 0
-        for t in iter(copy_to_be_assigned.values()):
-            if 'ps' in t.task_id and ps_count <= ps_tasks_can_fit:
-                pop_t = to_be_assigned.pop(t.task_id, None)
+        pop_t = None
+        for k, v in iter(job.tasks.items()):
+            if k in assigned_task:
+                continue
+
+            if 'ps' in k and ps_count <= ps_tasks_can_fit:
+                pop_t = to_be_assigned[k]
                 ps_count += 1
-            elif 'worker' in t.task_id and worker_count <= worker_tasks_can_fit:
-                pop_t = to_be_assigned.pop(t.task_id, None)
+            elif 'worker' in k and worker_count <= worker_tasks_can_fit:
+                pop_t = to_be_assigned[k]
                 worker_count += 1
             else:
                 continue
@@ -83,37 +85,37 @@ def try_cross_node_alloc_ms(infrastructure, job):
             if pop_t is not None:
                 result = node.try_reserve_and_placed_task(pop_t)
                 if not result:
-                    # re-insert
-                    to_be_assigned[pop_t.task_id] = pop_t
                     continue
                 # from a job perspective keep track of where my tasks are
-                job.tasks_running_on[pop_t.task_id] = node.node_id
-                assigned_task += 1
+                job.tasks_running_on[k] = node.node_id
+                assigned_task[k] = v
         
         # at least we have some task in the node.
         if ps_count > 0 or worker_count > 0:        
             node.try_reserve_and_placed_job(job, False)
             nodes_assigned[node.node_id] = node
 
-        if len(nodes_assigned) >= num_full_nodes and num_full_tasks == assigned_task:
+        if len(nodes_assigned) >= least_num_full_nodes and num_full_tasks == assigned_task:
             util.print_fn("assigned number of nodes %d" % 
                         (len(nodes_assigned)))
             break
     
     # if not enough, clear everything.
     # NOTE: all tasks need to be assigned!!!
-    if len(nodes_assigned) < num_full_nodes or assigned_task < num_full_tasks:
+    if len(nodes_assigned) < least_num_full_nodes or len(assigned_task) < num_full_tasks:
         for node in iter(nodes_assigned.values()):
             node.placed_jobs.pop(job.job_id)
             for t in iter(job.tasks.values()):
                 node.placed_tasks.pop(t.task_id, None)
         nodes_assigned.clear()
-        return [], 0, False 
+        return {}, 0, False 
     
     # TODO: NETWORK COSTS
-    if len(nodes_assigned) >= num_full_nodes and assigned_task == num_full_tasks:
+    if len(nodes_assigned) >= least_num_full_nodes and len(assigned_task) == num_full_tasks:
         #network_service.calculate_network_costs()
-        return list(nodes_assigned.keys()), 0, True
+        util.print_fn("placed job %s, on node %s" % (job.job_id, str(nodes_assigned.keys())))
+        return nodes_assigned , 0, True
+
     raise ArithmeticError()
 
 def try_single_node_alloc_ms(infrastructure, job):
@@ -125,11 +127,11 @@ def try_single_node_alloc_ms(infrastructure, job):
     omitting data transfer i.e. DFS data transfer.
     """
     allocated = False
-    node_id = None
+    assigned_node = {}
     network_costs = 0 
     for node in infrastructure.get_free_nodes():
         if allocated:
-            return [node_id], network_costs, allocated
+            return assigned_node, network_costs, allocated
 
         if ((node.gpu_free() >= job.gpus) and 
             (node.cpu_free() >= job.total_cpus_required()) and 
@@ -137,8 +139,8 @@ def try_single_node_alloc_ms(infrastructure, job):
             if not node.try_alloc_job(job): continue
             # succeed !
             allocated = True
-            node_id = node.node_id
-    return [node_id], network_costs, allocated
+            assigned_node[node.node_id] = node
+    return assigned_node, network_costs, allocated
 
 
     

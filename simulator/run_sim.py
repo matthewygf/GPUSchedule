@@ -12,6 +12,7 @@ from core import util
 from core import flags
 from core import job
 from core import job_queue_manager as jq
+from core import jobs_manager as am
 import log_manager as lm
 from core import lp
 from core import schedule as sche
@@ -1768,9 +1769,10 @@ def main(log_manager):
 
     # NOTE: init scheduler and jobs
     jq_manager = jq.JobQueueManager(FLAGS)
-    scheduler = sche.Scheduler(infrastructure, jq_manager)
+    jobs_manager = am.JobsManager(jq_manager)
+    scheduler = sche.Scheduler(infrastructure, jobs_manager)
     scheduler.sort_job_trace()
-
+    
     # NOTE: start simulation
     scheduler.start()
 

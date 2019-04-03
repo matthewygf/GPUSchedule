@@ -69,10 +69,15 @@ class JobQueueManager(object):
     def _can_add(self, queue_idx):
             return len(self.queues[queue_idx]) < self.queue_limit[queue_idx]
 
-    def total_jobs(self):
+    def total_jobs(self, delta_time=-1):
         num = 0
         for q in self.queues:
-            num += len(q)
+            if delta_time > 0:
+                for j in q:
+                    if j.submit_time >= delta_time:
+                        num += 1
+            else:
+                num += len(q)
         return num
 
     def _add(self, queue_idx, job):
