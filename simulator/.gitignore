@@ -6,3 +6,5 @@ plot*
 
 **/*.csv
 **/*.log
+**/*.json
+*.json

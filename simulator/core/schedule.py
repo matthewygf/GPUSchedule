@@ -90,17 +90,19 @@ class Scheduler(object):
             # 3. TODO: migrate running jobs
             # 4. TODO: stochastic job arrival process
             self._gen_jobs(delta_time)
+            time.sleep(1)
             self._schedule(delta_time)
             new_current_remaining = self.jobs_manager.total_jobs(delta_time) 
+            time.sleep(1)
             end_time = time.time()
             self.release_finished_jobs(end_time)
             delta_time = end_time - start_time
             current_remaining = new_current_remaining
             running_jobs = len(self.jobs_manager.running_jobs)
             self.pending_time = self.jobs_manager.average_pending_time()
-            assert running_jobs > 0            
+            #assert running_jobs > 0            
             steps += 1
-            if (steps>=7500) and ((steps % 7500) == 0):
+            if (steps>=5) and ((steps % 5) == 0):
                 util.print_fn("Remaining jobs: %d, Running Jobs: %d Finished Jobs %d" %
                             (new_current_remaining, running_jobs, len(self.jobs_manager.finished_jobs)))
                 util.print_fn(self.jobs_manager.running_jobs.keys())
@@ -110,7 +112,7 @@ class Scheduler(object):
                              'busy' if len(v.running_tasks) > 0 else 'free',
                              v.gpu_used,
                              str(v.running_tasks.keys())))
-                
+                    
         finished_time = time.time()
         Total_time_taken = finished_time - start_time
         util.print_fn("Total Time Taken in seconds: %d" % total_time_taken)
