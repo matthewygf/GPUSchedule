@@ -105,8 +105,8 @@ class Job(object):
     def setup_tasks(self):
         result = {}
         for taskidx in self.task_id:
-            is_ps = taskidx.startswith('ps')
-            needgpu = 1 if taskidx.startswith('worker') else 0
+            is_ps = 'ps' in taskidx
+            needgpu = 1 if 'worker' in taskidx else 0
             t = Task(self.job_id, self.job_id+"_"+taskidx, self.duration, is_ps, self.cpus_per_task, self.memory_per_task, needgpu)
             result[t.task_id] = t 
         return result
@@ -120,11 +120,14 @@ class Job(object):
         return result
 
     def task_finished(self, t_id):
-        if t_id in self.tasks:
+        if t_id in self.tasks and not self.tasks[t_id].finished:
             util.print_fn("task %s finished" % t_id)
+            self.tasks[t_id].finished = True
             self.tasks_finished += 1
 
     def try_finished(self):
+        if self.finished:
+            return True
         # job wasn't deep copied to multiple nodes
         if self.tasks_finished == self.task_count:
             util.print_fn("job %s finished" % self.job_id)
