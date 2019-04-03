@@ -167,6 +167,7 @@ class Node(object):
         self.node_id = str(node_id)
         self.cpu_count = cpus
         self.gpu_count = gpus
+        assert self.gpu_count <= 4
         self.mem_size = memory
 
         self.network_usage = 0
@@ -203,6 +204,7 @@ class Node(object):
         return result
 
     def gpu_free(self):
+        assert self.gpu_count <= 4
         result = (self.gpu_count - self.gpu_used)
         return result
 
@@ -211,23 +213,25 @@ class Node(object):
         return result
 
     def is_free(self):
-        return self.gpu_free() >= 0 or self.cpu_free() >= 0 or self.mem_free() >= 0
+        return self.gpu_free() > 0 or self.cpu_free() > 0 or self.mem_free() > 0
 
-    def _release_from_tasks(self, tasks, placed_only=False):
-        for t in iter(tasks.copy().values()):
+    def _release_from_tasks(self, job, placed_only=False):
+        for t in iter(job.tasks.copy().values()):
             if placed_only:
                 pop_t = self.placed_tasks.pop(t.task_id)
             else:
-                # we already dealt with, just released it.
-                pop_t = t
-            self.cpu_used -= pop_t.cpu
-            self.gpu_used -= pop_t.gpu
-            self.mem_used -= pop_t.mem
+                pop_t = self.running_tasks.pop(t.task_id, None)
+            if pop_t is not None:
+                job.tasks_running_on.pop(t.task_id)
+                self.cpu_used -= pop_t.cpu
+                self.gpu_used -= pop_t.gpu
+                assert self.gpu_used >= 0
+                self.mem_used -= pop_t.mem
 
     def release_allocated_resources(self, job, placed_only=False):
         """NOTE: release"""
         # clear tasks
-        self._release_from_tasks(job.tasks, placed_only)
+        self._release_from_tasks(job, placed_only)
         # assume task in the node is the main consumer
         if placed_only:
             self.placed_jobs.pop(job.job_id)
@@ -286,11 +290,9 @@ class Node(object):
             if duration >= j.duration:
                 util.print_fn("Node %s : job %s is trying to be finished" % (self.node_id, j.job_id))
                 # iterate over task within the job
-                for t_id, n_id in iter(j.tasks_running_on.copy().items()):
+                for t_id, n_id in iter(j.tasks_running_on.items()):
                     if n_id == self.node_id:
-                        self.running_tasks.pop(t_id, None)
                         j.task_finished(t_id)
-                        j.tasks_running_on.pop(t_id)
                 result = j.try_finished()
                 if result:
                     results.append(j)
@@ -317,6 +319,7 @@ class Node(object):
         self.cpu_used += task.cpu
         self.mem_used += task.mem
         self.gpu_used += task.gpu
+        assert self.gpu_used <= self.gpu_count
         self.placed_tasks[task.task_id] = task
         return result
 
@@ -350,7 +353,7 @@ class Node(object):
         ps_tasks, worker_tasks = self.can_fit_num_task(job.tasks)
 
         if ps_tasks + worker_tasks >= job.task_count:
-            util.print_fn("node fit current job %s Trying to allocate job" % job.job_id)
+            # util.print_fn("node fit current job %s Trying to allocate job" % job.job_id)
 
             copy_j = job.tasks.copy()
             for t in iter(copy_j.values()):
@@ -361,9 +364,9 @@ class Node(object):
             if not result:
                 # Not executed yet
                 self.release_allocated_resources(job, placed_only=True)
-                util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
+                util.print_fn("RELEASED: Job does not fit on node", util.LOG_LEVEL_WARNING)
                 return result
-            util.print_fn("placed job %s, tasks %d at node %s" % (job.job_id, len(job.tasks), self.node_id))
+            util.print_fn("placed job %s, num tasks %d on node %s" % (job.job_id, len(job.tasks), self.node_id))
         else:
             util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
         return result
