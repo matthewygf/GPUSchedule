@@ -48,16 +48,14 @@ class JobQueueManager(object):
             '--------------------------------- Read TF jobs from: %s ---------------------------------' 
             % os.path.basename(self.file_path))
         util.print_fn('    we get the following fields:\n        %s' % keys)
-        job_idx = 0
         for row in reader:
-            self._add_to_job_queue(self.parse_job(row, job_idx))
-            job_idx += 1
+            self._add_to_job_queue(self.parse_job(row))
 
-        assert job_idx == self.total_jobs()
-        util.print_fn('---------------------------------- Get %d TF jobs in total ----------------------------------' % job_idx)
+        util.print_fn('---------------------------------- Get %d TF jobs in total ----------------------------------' % self.total_jobs())
         fd.close()
 
-    def parse_job(self, job_dict, idx):
+    def parse_job(self, job_dict):
+        idx = job_dict['job_id']
         duration = job_dict['duration']
         model = job_dict['model_name']
         interval = job_dict['interval']
@@ -72,12 +70,14 @@ class JobQueueManager(object):
     def total_jobs(self, delta_time=-1):
         num = 0
         for q in self.queues:
-            if delta_time > 0:
-                for j in q:
-                    if j.submit_time >= delta_time:
-                        num += 1
-            else:
-                num += len(q)
+            num += len(q)
+        # for q in self.queues:
+        #     if delta_time > 0:
+        #         for j in q:
+        #             if j.submit_time >= delta_time:
+        #                 num += 1
+        #     else:
+        #         num += len(q)
         return num
 
     def _add(self, queue_idx, job):

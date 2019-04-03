@@ -167,7 +167,6 @@ class Node(object):
         self.node_id = str(node_id)
         self.cpu_count = cpus
         self.gpu_count = gpus
-        assert self.gpu_count <= 4
         self.mem_size = memory
 
         self.network_usage = 0
@@ -181,6 +180,7 @@ class Node(object):
         self.running_tasks = {}
         self.placed_tasks = {}
         self.placed_jobs = {}
+        self.finished_tasks = []
 
     def get_network_usage(self):
         # assumed the jjob can 
@@ -203,7 +203,6 @@ class Node(object):
         return result
 
     def gpu_free(self):
-        assert self.gpu_count <= 4
         result = (self.gpu_count - self.gpu_used)
         return result
 
@@ -217,12 +216,14 @@ class Node(object):
     def release_allocated_resources(self, task):
         """NOTE: release"""
         # clear tasks
-        assert task.finished
         self.cpu_used -= task.cpu
-        self.gpu_used -= task.gpu
+        if 'worker' in task.task_id:
+            assert task.gpu == 1
+            self.gpu_used -= task.gpu
+            assert self.gpu_used < 4, task.task_id
         assert self.gpu_used >= 0
         self.mem_used -= task.mem
-        return True
+        self.finished_tasks.append(task.task_id)
 
     def can_fit_num_task(self, tasks):
         """
@@ -280,10 +281,12 @@ class Node(object):
         result = (cpu_offset >= 0) and (mem_offset >= 0) and (gpu_offset >= 0)
         if not result:
             return result
+        assert self.gpu_used + task.gpu <= self.gpu_count
         self.cpu_used += task.cpu
         self.mem_used += task.mem
-        self.gpu_used += task.gpu
-        assert self.gpu_used <= self.gpu_count
+        if 'worker' in task.task_id:
+            assert task.gpu == 1
+            self.gpu_used += task.gpu
         self.placed_tasks[task.task_id] = task
         return result
 
@@ -327,10 +330,14 @@ class Node(object):
             result = self.try_reserve_and_placed_job(job, is_single)
             if not result:
                 # Not executed yet
-                self.release_allocated_resources(job, placed_only=True)
+                for jt in job.tasks.items():
+                    job.tasks_running_on.pop(jt.task_id, None)
+                    self.placed_tasks.pop(jt.task_id, None)
+                    self.release_resources(jt)
+                self.placed_jobs.pop(job.job_id)
                 util.print_fn("RELEASED: Job does not fit on node", util.LOG_LEVEL_WARNING)
                 return result
-            util.print_fn("placed job %s, num tasks %d on node %s" % (job.job_id, len(job.tasks), self.node_id))
+            util.print_fn("placed SINGLE NODE job %s, num tasks %d on node %s" % (job.job_id, len(job.tasks), self.node_id))
         else:
             util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
         return result

@@ -11,7 +11,6 @@ import numpy
 import math
 from core import util
 from core import models
-from core import resource_requirment as rq
 from model import model_factory
 import csv
 import time
@@ -75,6 +74,7 @@ class Job(object):
         self.started = False
         self.running = False
         self.finished = False
+        self.failed_schedule = 0
         self.start_time = 0
         self.duration = int(duration)
         self.submit_time = int(submit_time)
@@ -121,7 +121,6 @@ class Job(object):
 
     def task_finished(self, t_id):
         if t_id in self.tasks and not self.tasks[t_id].finished:
-            util.print_fn("task %s finished" % t_id)
             self.tasks[t_id].finished = True
             self.tasks_finished += 1
 
@@ -130,7 +129,6 @@ class Job(object):
             return True
         # job wasn't deep copied to multiple nodes
         if self.tasks_finished == self.task_count:
-            util.print_fn("job %s finished" % self.job_id)
             self.running = False
             self.finished = True
             return True

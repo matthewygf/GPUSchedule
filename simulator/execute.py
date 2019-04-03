@@ -25,7 +25,7 @@ def main():
     while poll is None:
         time.sleep(5)
         poll = p.poll()
-        print("process pid %d still running" % pid)
+        #print("process pid %d still running" % pid)
     
 if __name__ == "__main__":
     main()

@@ -3,11 +3,11 @@ import copy
 from core import util
 from infra import network_service
 #TODO: GANDIVA, TOPOLOGY 
-def ms_yarn_placement(scheduler, next_job):
+def ms_yarn_placement(infrastructure, next_job):
     gpu_demand = next_job.gpus
     success = False
-    try_alloc_ms = try_cross_node_alloc_ms if gpu_demand > scheduler.infrastructure.num_gpu_p_node else try_single_node_alloc_ms
-    nodes, network_costs, success = try_alloc_ms(scheduler.infrastructure, next_job)
+    try_alloc_ms = try_cross_node_alloc_ms if gpu_demand > infrastructure.num_gpu_p_node else try_single_node_alloc_ms
+    nodes, network_costs, success = try_alloc_ms(infrastructure, next_job)
     return nodes, network_costs, success
 
 placement_algorithms = {
@@ -18,26 +18,21 @@ def network_costs_update(network_costs, job):
     """NOTE: cross rack network_costs"""
     pass
 
-def schedule_fifo(scheduler, delta):
+def schedule_fifo(placement_algo, infrastructure, jobs_manager, delta):
     """NOTE: First in first out, does not preempt or migrate"""
-    placement = placement_algorithms[scheduler.placement]
-    # check if there is any node available
-    num_free = scheduler.num_free_nodes()
-    if num_free <= 0:
-        #util.print_fn("Everything is full")
-        return
     # F in F out, get the first job from the queue
-    next_job = scheduler.jobs_manager.pop(delta)
+    next_job = jobs_manager.pop(delta)
     if next_job is None:
         return
     assert next_job.is_waiting()
-    nodes, network_costs, success = placement(scheduler, next_job)
+    nodes, network_costs, success = placement_algo(infrastructure, next_job)
     if success:
-        # AT THIS POINT: THIS ACTUALLY RUN THE JOB.
-        scheduler.add_to_running(nodes, next_job.job_id)
+        return nodes, network_costs, next_job.job_id, success
     else:
+        #util.print_fn("Didn't found the right placement.")
         next_job.pending_time += delta
-        scheduler.jobs_manager.insert(next_job, job_in_queue=0)
+        jobs_manager.insert(next_job)
+        return nodes, network_costs, next_job.job_id, success
 
 scheduling_algorithms = {
     'fifo': schedule_fifo,
@@ -60,12 +55,14 @@ def try_cross_node_alloc_ms(infrastructure, job):
     to_be_assigned = job.tasks.copy()
     num_full_tasks = len(job.tasks)
     assigned_task = {}
-    for node in infrastructure.get_free_nodes():
+    for n_id, node in iter(infrastructure.nodes.items()):
+        if not node.is_free(): continue
+
         if len(assigned_task) == len(to_be_assigned): break
         
         # this is checking how many nodes can fit the job current remaining tasks.
         ps_tasks_can_fit, worker_tasks_can_fit = node.can_fit_num_task(to_be_assigned)
-
+        
         ps_count = 0
         worker_count = 0
         pop_t = None
@@ -85,6 +82,7 @@ def try_cross_node_alloc_ms(infrastructure, job):
             if pop_t is not None:
                 result = node.try_reserve_and_placed_task(pop_t)
                 if not result:
+                    # we didn't actually placed anything if it was false.
                     continue
                 # from a job perspective keep track of where my tasks are
                 job.tasks_running_on[k] = node.node_id
@@ -136,7 +134,7 @@ def try_single_node_alloc_ms(infrastructure, job):
         if ((node.gpu_free() >= job.gpus) and 
             (node.cpu_free() >= job.total_cpus_required()) and 
             (node.mem_free() >= job.total_mem_required())):
-            if not node.try_alloc_job(job): continue
+            if not node.try_alloc_job(job, True): continue
             # succeed !
             allocated = True
             assigned_node[node.node_id] = node

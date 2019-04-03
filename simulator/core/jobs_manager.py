@@ -7,7 +7,7 @@ class JobsManager(object):
         self.job_queue_manager = job_queue_manager
         self.running_jobs = {}
         self.finished_jobs = {}
-        self.busy_nodes = {}
+        self.busy_nodes = []
     
     def sort_job_trace(self):
         for i, q in enumerate(self.job_queue_manager.queues):
@@ -29,7 +29,7 @@ class JobsManager(object):
         if started_task_count > 0:
             # this node has started some tasks, so it is busy
             if node.node_id not in self.busy_nodes:
-                self.busy_nodes[node.node_id] = node
+                self.busy_nodes.append(node.node_id)
         
         # This case is when some tasks are ready, but not all.
         if executed_job is None:
@@ -55,32 +55,15 @@ class JobsManager(object):
         # TODO:
         pass
 
-    def release_finished_jobs(self, infrastructure, current_time):
-        j_ids = []
-        n_ids = []
+    def prepare_finish_tasks(self, current_time):
+        jobs_to_finish = []
         for k, v, in iter(self.running_jobs.items()):
             duration = current_time - v.start_time
-            if duration < v.duration: continue
-            for task_id, node_id in iter(v.tasks_running_on.items()):
-                assert (len(self.busy_nodes[node_id].running_tasks) == len(infrastructure.nodes[node_id].running_tasks))
-                assert (self.busy_nodes[node_id].gpu_free() == infrastructure.nodes[node_id].gpu_free())
-                running_task = infrastructure.nodes[node_id].running_tasks.pop(task_id)
-                assert not running_task.finished
-                v.task_finished(task_id)
-                infrastructure.nodes[node_id].release_allocated_resources(running_task)
-                assert (self.busy_nodes[node_id].gpu_free() == infrastructure.nodes[node_id].gpu_free())
-                success = v.try_finished()
-                if success:
-                    j_ids.append(k)
-                    util.print_fn("Node %s : job %s is finished" % (node_id, k))
-                if len(infrastructure.nodes[node_id].running_tasks) == 0:
-                    assert (self.busy_nodes[node_id].running_tasks == infrastructure.nodes[node_id].running_tasks)
-                    assert (self.busy_nodes[node_id].gpu_free() == infrastructure.nodes[node_id].gpu_free())
-                    n_ids.append(node_id)
-        for j_id in j_ids:
-            finished_j = self.running_jobs.pop(j_id)
-            self.finished_jobs[j_id] = finished_j
-        for n_id in n_ids:
-            self.busy_nodes.pop(n_id)
+            if duration < (v.duration / 10): continue
+            jobs_to_finish.append(v)
+        return jobs_to_finish
+
+            
+            
     
 

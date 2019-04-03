@@ -97,7 +97,6 @@ class Infrastructure(object):
         result = 0
         for node in iter(self.nodes.values()):
             result += node.gpu_free()
-
         return result
 
     def get_free_nodes(self):
