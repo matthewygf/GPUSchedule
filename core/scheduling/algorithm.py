@@ -98,11 +98,13 @@ def try_cross_node_alloc_ms(infrastructure, job):
 
     # if not enough, clear everything.
     # NOTE: all tasks need to be assigned!!!
-    if len(nodes_assigned) < least_num_full_nodes or len(assigned_task) < num_full_tasks:
+    if len(assigned_task) < num_full_tasks or len(nodes_assigned) < least_num_full_nodes :
         for node in iter(nodes_assigned.values()):
             node.placed_jobs.pop(job.job_id)
             for t in iter(job.tasks.values()):
-                node.placed_tasks.pop(t.task_id, None)
+                pop_t = node.placed_tasks.pop(t.task_id, None)
+                if pop_t is not None:
+                    node.release_allocated_resources(pop_t)
         nodes_assigned.clear()
         return {}, False
 
