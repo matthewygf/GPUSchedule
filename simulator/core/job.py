@@ -106,7 +106,7 @@ class Job(object):
         result = {}
         for taskidx in self.task_id:
             is_ps = 'ps' in taskidx
-            needgpu = 1 if 'worker' in taskidx else 0
+            needgpu = 1 if not is_ps else 0
             t = Task(self.job_id, self.job_id+"_"+taskidx, self.duration, is_ps, self.cpus_per_task, self.memory_per_task, needgpu)
             result[t.task_id] = t 
         return result

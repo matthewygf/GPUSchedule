@@ -1,5 +1,6 @@
 import copy
 from core import util
+import time
 
 '''
 TODO: add cpu and network load support in class _Node
@@ -213,11 +214,18 @@ class Node(object):
     def is_free(self):
         return self.gpu_free() > 0 or self.cpu_free() > 0 or self.mem_free() > 0
 
+    def reset_resource(self, num=0, gpu=1, cpu=4, mem=6):
+        assert len(self.running_tasks) >= num
+        self.gpu_used = num * gpu
+        self.cpu_used = num * cpu
+        self.mem_used = num * mem
+    
+
     def release_allocated_resources(self, task):
         """NOTE: release"""
         # clear tasks
         self.cpu_used -= task.cpu
-        if 'worker' in task.task_id:
+        if not task.is_ps:
             assert task.gpu == 1
             self.gpu_used -= task.gpu
             assert self.gpu_used < 4, task.task_id
@@ -246,8 +254,6 @@ class Node(object):
 
     def execute_job(self, job_id):
         # check placed tasks in current node that is correspond to same job_id
-        started_jobs = []
-        started_tasks = []
         started_task_count = 0
         job_to_execute = self.placed_jobs.pop(job_id, None)
         if job_to_execute is None:
@@ -275,6 +281,7 @@ class Node(object):
 
     def try_reserve_and_placed_task(self, task):
         result = False
+        time.sleep(1)
         cpu_offset = self.cpu_free() - task.cpu
         mem_offset = self.mem_free() - task.mem
         gpu_offset = self.gpu_free() - task.gpu
@@ -284,7 +291,7 @@ class Node(object):
         assert self.gpu_used + task.gpu <= self.gpu_count
         self.cpu_used += task.cpu
         self.mem_used += task.mem
-        if 'worker' in task.task_id:
+        if not task.is_ps:
             assert task.gpu == 1
             self.gpu_used += task.gpu
         self.placed_tasks[task.task_id] = task
@@ -327,13 +334,14 @@ class Node(object):
                 result = self.try_reserve_and_placed_task(t)
                 if result:
                     job.tasks_running_on[t.task_id] = self.node_id
+            
             result = self.try_reserve_and_placed_job(job, is_single)
             if not result:
                 # Not executed yet
                 for jt in job.tasks.items():
                     job.tasks_running_on.pop(jt.task_id, None)
                     self.placed_tasks.pop(jt.task_id, None)
-                    self.release_resources(jt)
+                    self.release_allocated_resources(jt)
                 self.placed_jobs.pop(job.job_id)
                 util.print_fn("RELEASED: Job does not fit on node", util.LOG_LEVEL_WARNING)
                 return result
