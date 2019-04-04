@@ -61,6 +61,11 @@ flags.DEFINE_integer('bandwidth', 10000,
                      http://arxiv.org/abs/1805.07891 
                      modern is about 10GBps 
                      ''')
+flags.DEFINE_integer('internode_latency', 0.025,
+                     '''
+                     internode, within the same rack, should there be latency
+                     in seconds
+                     ''')
 
 flags.DEFINE_integer('num_gpu_p_node', 8,
                 '''Part of cluster spec: the number of gpus on each node, default is 8''')

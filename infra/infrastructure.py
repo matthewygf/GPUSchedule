@@ -27,6 +27,7 @@ class Infrastructure(object):
         self.nodes = {}
         self.num_switch = self.flags.num_switch
         self.bandwidth = self.flags.bandwidth
+        self.internode_latency = self.flags.internode_latency
         self.num_nodes_p_switch = self.flags.num_node_p_switch
         self.num_cpu_p_node = self.flags.num_cpu_p_node
         self.num_gpu_p_node = self.flags.num_gpu_p_node

@@ -1,4 +1,5 @@
-from core import util
+from core import util 
+# Right now only internode.
 def calculate_network_costs(infrastructure, job):
     """
         NOTE:
@@ -32,7 +33,7 @@ def calculate_network_costs(infrastructure, job):
     # the more communication we need to do.
     # per second **Some Heuristics**
     model_per_sec = (job.model_size / infrastructure.bandwidth)
-    nodes_induced_sec = (cross_many*0.025)
+    nodes_induced_sec = (cross_many * infrastructure.internode_latency)
     iteration_round_trip = job.iterations * 2.0
     extra_seconds = ( model_per_sec + nodes_induced_sec ) * iteration_round_trip
     util.print_fn("Cross %s need to added extra %f for job %s" % (str(diff), extra_seconds, job.job_id))
