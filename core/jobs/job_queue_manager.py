@@ -62,7 +62,7 @@ class JobQueueManager(object):
         interval = job_dict['interval']
         num_gpus = int(job_dict['num_gpu'])
         submit_time = job_dict['submit_time']
-        iterations = job_dict['iterations']
+        iterations = float(job_dict['iterations'])
         return job.Job(idx, model, duration, iterations, interval, submit_time, gpu=num_gpus)
 
     def _can_add(self, queue_idx):

@@ -43,7 +43,10 @@ class Scheduler(object):
         nodes, job, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager,delta)
         if success:
             extras = network_service.calculate_network_costs(self.infrastructure, job)
+            orginal_duration = job.duration
             job.add_network_costs(extras)
+            util.print_fn("Job %s : Original duration %f , New duration %f" % 
+                          (job.job_id, orginal_duration, job.duration))
             self.add_to_running(nodes, job.job_id)
         else:
             assert (jobs_all == self.jobs_manager.total_jobs(delta))

@@ -1,3 +1,4 @@
+from core import util
 def calculate_network_costs(infrastructure, job):
     """
         NOTE:
@@ -19,11 +20,20 @@ def calculate_network_costs(infrastructure, job):
         else:
             wk_nodes.add(v)
 
-    diff = ps_nodes.difference(wk_nodes)
+    diff = ps_nodes.symmetric_difference(wk_nodes)
     cross_many = len(diff)
+    if cross_many == 0:
+        # cross node will induced latency, if all resides on the same node, 
+        # assume there is nothing even if there is PS-workers
+        return 0
+
     # assume PS has sharded parameters,
     # so the more difference we have,
     # the more communication we need to do.
     # per second **Some Heuristics**
-    extra_seconds = ((job.model_size / infrastructure.bandwidth) + (cross_many*0.25)) * job.iterations * 2
+    model_per_sec = (job.model_size / infrastructure.bandwidth)
+    nodes_induced_sec = (cross_many*0.025)
+    iteration_round_trip = job.iterations * 2.0
+    extra_seconds = ( model_per_sec + nodes_induced_sec ) * iteration_round_trip
+    util.print_fn("Cross %s need to added extra %f for job %s" % (str(diff), extra_seconds, job.job_id))
     return extra_seconds
