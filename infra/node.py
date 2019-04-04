@@ -2,166 +2,6 @@ import copy
 from core import util
 import time
 
-'''
-TODO: add cpu and network load support in class _Node
-'''
-class _Node(object):
-    def __init__(self, id, num_gpu=0, num_cpu=0, mem=0):
-        self.id = id
-        self.num_cpu = num_cpu
-        self.free_cpus = num_cpu
-        self.num_gpu = num_gpu       
-        self.free_gpus = num_gpu
-        #network load: can be bw, or the amount of traffic
-        # in and out should be the same
-        self.network_in = 0
-        self.network_out = 0
-
-        self.mem = mem
-        self.free_mem = mem
-
-        #node class for gandiva
-        self.job_gpu = 0
-        self.num_jobs = 0
-
-        util.print_fn('    Node[%d] has %d gpus, %d cpus, %d G memory' % (id, num_gpu, num_cpu, mem))
-    
-    def init_node(self, num_gpu=0, num_cpu=0, mem=0):
-        if num_gpu != 0:
-            self.num_gpu = num_gpu
-            self.free_gpus = num_gpu
-        if num_cpu != 0:
-            self.num_cpu = num_cpu
-            self.free_cpus = num_cpu
-        if mem != 0:
-            self.mem = mem
-            self.free_mem = mem 
-
-        self.add_gpus(self.num_gpu)        
-        self.add_cpus(self.num_gpu)        
-
-
-    ''' GPU  '''
-    def add_gpus(self, num_gpu=0):
-        pass
-
-    def check_free_gpus(self):
-        return self.free_gpus
-
-
-    def alloc_gpus(self, num_gpu=0):
-        '''
-        If enough free gpus, allocate gpus
-        Return: True, for success;
-                False, for failure
-        '''
-        if num_gpu > self.free_gpus:
-            return False
-        else:
-            self.free_gpus -= num_gpu
-            return True
-
-    def release_gpus(self, num_gpu=0):
-        '''
-        release using gpus back to free list
-        '''
-        if self.free_gpus + num_gpu > self.num_gpu:
-            self.free_gpus = self.num_gpu
-            return False
-        else:
-            self.free_gpus += num_gpu
-            return True
-
-
-    ''' CPU '''
-
-    def add_cpus(self, num_cpu=0):
-        pass
-
-    def check_free_cpus(self):
-        return self.free_cpus
-
-    def alloc_cpus(self, num_cpu=0):
-        '''
-        If enough free cpus, allocate gpus
-        Return: True, for success;
-                False, for failure
-        '''
-        if num_cpu > self.free_cpus:
-            return False
-        else:
-            self.free_cpus -= num_cpu
-            return True
-
-    def release_cpus(self, num_cpu=0):
-        '''
-        release using cpus back to free list
-        '''
-        if self.free_cpus + num_cpu > self.num_cpu:
-            self.free_cpus = self.num_cpu
-            return False
-        else:
-            self.free_cpus += num_cpu
-            return True 
-
-
-    '''network'''
-
-    def add_network_load(self, in_load=0, out_load=0):
-        self.network_in += in_load
-        self.network_out += out_load
-        self.network_in = round(self.network_in, 1)
-        self.network_out = round(self.network_in, 1)
-
-
-    def release_network_load(self, in_load=0, out_load=0):
-        self.network_in -= in_load
-        self.network_out -= out_load
-        self.network_in = round(self.network_in, 1)
-        self.network_out = round(self.network_in, 1)
-
-    def set_network_load(self, in_load=0, out_load=0):
-        self.network_in = in_load
-        self.network_out = out_load
-        self.network_in = round(self.network_in, 1)
-        self.network_out = round(self.network_in, 1)
-
-
-    def alloc_job_res(self, num_gpu=0, num_cpu=0):
-        '''
-        alloc job resource
-        '''
-        gpu = self.alloc_gpus(num_gpu)
-        cpu = self.alloc_cpus(num_cpu)
-
-        if cpu == False or gpu == False:
-            self.release_gpus(num_gpu)
-            self.release_cpus(num_cpu)
-            return False
-
-        return True 
-
-    def release_job_res(self, node_dict):
-        '''
-        input is node_dict from placement
-        {'id':xx, 'num_gpu':xxx, 'num_cpu': xxx, 'network': xxxx, 'tasks': [w2, ps2]}
-        '''
-        self.release_network_load(node_dict['network'], node_dict['network'])
-        cpu = self.release_cpus(node_dict['num_cpu'])
-        gpu = self.release_gpus(node_dict['num_gpu'])
-
-        self.free_mem = self.free_mem + node_dict['mem']
-
-        return (cpu and gpu)
-
-    def release_job_gpu_cpu(self, num_gpu, num_cpu):
-        '''
-        input is gpu and cpu
-        '''
-        cpu = self.release_cpus(num_cpu)
-        gpu = self.release_gpus(num_gpu)
-
-        return (cpu and gpu)
 
 class Node(object):
     def __init__(self, node_id, cpus=0, gpus=0, memory=0):
@@ -219,7 +59,6 @@ class Node(object):
         self.gpu_used = num * gpu
         self.cpu_used = num * cpu
         self.mem_used = num * mem
-    
 
     def release_allocated_resources(self, task):
         """NOTE: release"""
@@ -248,7 +87,7 @@ class Node(object):
         mems_task_offset = (self.mem_free() // mem_per_task) - len(tasks)
         num_tasks_gpus_can_fit = worker_count if gpus_offset >= 0 else worker_count + gpus_offset
         num_tasks_cpus_can_fit = len(tasks) if cpus_task_offset >= 0 else len(tasks) + cpus_task_offset
-        num_tasks_mems_can_fit = len(tasks) if mems_task_offset  >= 0 else len(tasks) + mems_task_offset
+        num_tasks_mems_can_fit = len(tasks) if mems_task_offset >= 0 else len(tasks) + mems_task_offset
         num_ps_tasks_can_fit = min(num_tasks_cpus_can_fit, num_tasks_mems_can_fit) - num_tasks_gpus_can_fit
         return num_ps_tasks_can_fit, num_tasks_gpus_can_fit
 
@@ -258,7 +97,7 @@ class Node(object):
         job_to_execute = self.placed_jobs.pop(job_id, None)
         if job_to_execute is None:
             raise ValueError()
-        
+
         for k, v in iter(job_to_execute.tasks_running_on.items()):
             if v == self.node_id:
                 jt = self.placed_tasks.pop(k)
@@ -277,7 +116,7 @@ class Node(object):
         return:
             a tuple, each entry represent a gpu utilization.
         """
-        return (0.0, 0.0, 0.0, 0.0)        
+        return (0.0, 0.0, 0.0, 0.0)
 
     def try_reserve_and_placed_task(self, task):
         result = False
@@ -312,10 +151,10 @@ class Node(object):
                 else:
                     return False
             else:
-                #util.print_fn("Found at least 1 task %s, in node %s" % (t, self.node_id))
+                # util.print_fn("Found at least 1 task %s, in node %s" % (t, self.node_id))
                 found = True
                 break
-        
+
         self.placed_jobs[job.job_id] = job
         return found
 
@@ -327,25 +166,26 @@ class Node(object):
         ps_tasks, worker_tasks = self.can_fit_num_task(job.tasks)
 
         if ps_tasks + worker_tasks >= job.task_count:
-            # util.print_fn("node fit current job %s Trying to allocate job" % job.job_id)
-
             copy_j = job.tasks.copy()
+            placed = 0
             for t in iter(copy_j.values()):
                 result = self.try_reserve_and_placed_task(t)
                 if result:
                     job.tasks_running_on[t.task_id] = self.node_id
-            
-            result = self.try_reserve_and_placed_job(job, is_single)
-            if not result:
-                # Not executed yet
-                for jt in job.tasks.items():
-                    job.tasks_running_on.pop(jt.task_id, None)
-                    self.placed_tasks.pop(jt.task_id, None)
-                    self.release_allocated_resources(jt)
-                self.placed_jobs.pop(job.job_id)
-                util.print_fn("RELEASED: Job does not fit on node", util.LOG_LEVEL_WARNING)
-                return result
-            util.print_fn("placed SINGLE NODE job %s, num tasks %d on node %s" % (job.job_id, len(job.tasks), self.node_id))
+                    placed += 1
+            if placed > 0:
+                result = self.try_reserve_and_placed_job(job, is_single)
+                if not result:
+                    # Not executed yet
+                    for jt in job.tasks.items():
+                        job.tasks_running_on.pop(jt.task_id, None)
+                        self.placed_tasks.pop(jt.task_id, None)
+                        self.release_allocated_resources(jt)
+                    self.placed_jobs.pop(job.job_id)
+                    util.print_fn("RELEASED: Job does not fit on node", util.LOG_LEVEL_WARNING)
+                    return result
+                util.print_fn(
+                    "placed SINGLE NODE job %s, num tasks %d on node %s" % (job.job_id, len(job.tasks), self.node_id))
         else:
             util.print_fn("Job does not fit on node", util.LOG_LEVEL_WARNING)
         return result

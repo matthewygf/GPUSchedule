@@ -1,13 +1,3 @@
-'''
-JOB status:
-ADDED: add job into JOBS
-EVENT: init job events into event list
-PENDING:
-RUNNING: running job
-END: completed
-ERROR
-'''
-import numpy
 import math
 from core import util
 from core import models
@@ -15,7 +5,6 @@ from model import model_factory
 import csv
 import time
 import sys
-import os
 
 class Task(object):
     """NOTE: 
@@ -51,16 +40,23 @@ class Task(object):
     
 class Job(object):
     """
-    NOTE: 
+    NOTE:
     Assumption:
-    1. each GPU is a worker, in reality, this could be different. 
-    2.if number of gpu required by a job is less than 1, 
-    assume only 1 gpu, no worker , no ps.
-    3. if number of gpu required by a job is greater than 1, 
-    assumed ps is the mod of num_gpu_p_node, 
-    if less than 4, then it is between model replica, no need ps.
-    4. assume each task (ps, workers) have same amount of cpu.
-    5. assume each task (ps, workers) have same amount of mem.
+    1. each GPU is a worker, in reality, this could be different.
+    2. all job is a parameter server approach.
+    3. if number of gpu required by a job is less than 1,
+        assume only 1 gpu, no worker , no ps.
+    4. if number of gpu required by a job is greater than 1,
+        assumed ps is the mod of num_gpu_p_node,
+        if less than 4, then it is between model replica, no need ps.
+    5. assume each task (ps, workers) have same amount of cpu.
+    6. assume each task (ps, workers) have same amount of mem.
+    TODO:
+    #http://arxiv.org/abs/1807.11205
+    1. All reduce jobs
+
+    #http://arxiv.org/abs/1712.01887
+    2. Maybe Deep Gradient Compression (DGC)
     """
     def __init__(self, 
                  job_id, 
@@ -80,7 +76,6 @@ class Job(object):
         self.submit_time = int(submit_time)
         self.pending_time = 0.0
         self.model = model
-        # TODO: Network problem
         self.model_size = model_factory.model_sizes[model]
         self.migration_count = 0
         self.ps_count = gpu // 4 if gpu > 1 else 0

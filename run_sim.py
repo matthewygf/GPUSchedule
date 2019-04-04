@@ -10,12 +10,10 @@ import os
 
 from core import util
 from core import flags
-from core import job
-from core import job_queue_manager as jq
-from core import jobs_manager as am
+from core.jobs import job_queue_manager as jq
+from core.jobs import jobs_manager as am
 import log_manager as lm
-from core import lp
-from core import schedule as sche
+from core.scheduling import schedule as sche
 from infra import infrastructure as cluster
 
 import logging
@@ -23,41 +21,46 @@ import datetime
 
 # parse input arguments
 flags.DEFINE_string('trace_file', 'tf_job.csv',
-                '''Provide TF job trace file (*.csv, *.txt).
+                    '''Provide TF job trace file (*.csv, *.txt).
                     *.csv file, use \',\' as delimiter; *.txt file, user \' \' as deliminter.
                     Default file is tf_job.csv ''')
 flags.DEFINE_string('log_path', 'result-' + time.strftime("%Y%m%d-%H-%M-%S", time.localtime()),
-                '''Simulation output folder, including cluster/node/gpu usage trace, pending job_queue info.
-                Default folder is result-[time]''')
+                    '''Simulation output folder, including cluster/node/gpu usage trace, pending job_queue info.
+                    Default folder is result-[time]''')
 flags.DEFINE_string('scheme', 'yarn',
-                '''
-                Job placement scheme:
-                0.count, just resource counting, without assignment (which gpu, which cpu)
-                1.yarn, ms yarn
-                2.random
-                3.crandom (consolidate + random)
-                4.greedy
-                5.balance
-                6.cbalance (consolidate + balance)
-                Default is yarn''')
+                    '''
+                    Job placement scheme:
+                    0.count, just resource counting, without assignment (which gpu, which cpu)
+                    1.yarn, ms yarn
+                    2.random
+                    3.crandom (consolidate + random)
+                    4.greedy
+                    5.balance
+                    6.cbalance (consolidate + balance)
+                    Default is yarn''')
 flags.DEFINE_string('schedule', 'fifo',
-                '''
-                Job schedule scheme:
-                1.fifo
-                2.fjf, fit job first( in fifo order)
-                3.sjf, smallest job first
-                4.lpjf, longest pending job first
-                5.shortest, shortest-remaining-time job first
-                6.shortest-gpu, shortest-remaining-gputime job first
-                7.dlas, discretized las
-                8.dlas-gpu, dlas using gpu time
-                Default is fifo''')
+                    '''
+                    Job schedule scheme:
+                    1.fifo
+                    2.fjf, fit job first( in fifo order)
+                    3.sjf, smallest job first
+                    4.lpjf, longest pending job first
+                    5.shortest, shortest-remaining-time job first
+                    6.shortest-gpu, shortest-remaining-gputime job first
+                    7.dlas, discretized las
+                    8.dlas-gpu, dlas using gpu time
+                    Default is fifo''')
 flags.DEFINE_integer('num_switch', 1, '''Part of cluster spec: the number of switches in this cluster, default is 1''')
 
 flags.DEFINE_integer('num_node_p_switch', 32,
                      '''Part of cluster spec: the number of nodes under a single switch, default is 32''')
 
-flags.DEFINE_integer('rack_bandwidth', 100000, '''Bandwidth per rack in Mbps''')
+flags.DEFINE_integer('bandwidth', 10000,
+                     '''
+                     Bandwidth per rack in Mbps, default 10Gbps
+                     http://arxiv.org/abs/1805.07891 
+                     modern is about 10GBps 
+                     ''')
 
 flags.DEFINE_integer('num_gpu_p_node', 8,
                 '''Part of cluster spec: the number of gpus on each node, default is 8''')
@@ -143,70 +146,6 @@ def gandiva_sim_jobs(gputime=False, solve_starvation=0):
 
         # cur_time = cur_time + 1
 
-def one_queue_fifo_sim_jobs():
-    '''
-    run jobs in fifo order;
-    new jobs are added to the end of the pending queue
-    '''
-    while (len(JOBS.job_events) + len(JOBS.pending_jobs)) > 0:
-        if len(JOBS.job_events) == 0:
-            util.print_fn("This cluster is not large enough to run the job")
-            break
-
-        event = JOBS.job_events[0]
-        event_time = event['time']
-        # util.print_fn('--------------------------------- Handle event[time %d]------------------------------------' % event_time)
-        #for ending jobs, release gpu
-        has_ejob = False
-        for e_job in event['end_jobs']:
-            #remove from migratable jobs, if it's there
-            # JOBS.remote_migratable(e_job)
-
-            #job completes
-            CLUSTER.release_job_res(e_job)
-            # CLUSTER.release_gpus(e_job)
-            LOG.job_complete(e_job, event_time)
-            has_ejob = True
-
-
-        #for new-start jobs, try to start
-        for s_job in event['start_jobs']:
-            #add into pending list
-            JOBS.move_to_pending(s_job)
-
-
-        if CLUSTER.check_free_gpu() > 0:
-            #for pending jobs, try to start
-            new_start_list = list()
-            for p_job in JOBS.pending_jobs:
-                # ret = CLUSTER.alloc_gpus(p_job)
-                ret = scheduler.try_get_job_res(CLUSTER, JOBS, p_job)
-                if ret == True:
-                    ''' if remove_from_pending, then will miss the next p_job in the list '''
-                    new_start_list.append(p_job)
-                    #if job is migratable, add into migratable job list
-                    # JOBS.add_migratable(p_job)
-                    # JOBS.remove_from_pending(p_job, event_time)
-                    # JOBS.add_job_end_event(p_job)
-                    # util.print_fn('----job[%d] starts from pending' % p_job['job_idx'])
-                    # JOBS.read_job_info(p_job['job_idx'])
-                else:
-                    break
-            for ns_job in new_start_list:
-                JOBS.remove_from_pending(ns_job, event_time)
-                JOBS.add_job_end_event(ns_job)
-                util.print_fn('----job[%d] starts from pending' % ns_job['job_idx'])
-
-
-        #sort pending jobs based on the num_gpu
-        #JOBS.pending_jobs.sort(key = lambda e:e.__getitem__('num_gpu'))
-
-        #remove time_event
-        JOBS.job_events.pop(0)
-        JOBS.job_events.sort(key = lambda e:e.__getitem__('time'))
-        # JOBS.print_job_events()
-
-        LOG.checkpoint(JOBS, event_time)
 
 def smallest_first_sim_jobs(gputime=False):
     '''
@@ -1768,7 +1707,10 @@ def main(log_manager):
     log_manager.init(infrastructure)
 
     # NOTE: init scheduler and jobs
-    jq_manager = jq.JobQueueManager(FLAGS)
+    project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    trace_path = os.path.join(project_dir, FLAGS.trace_file)
+    jq_manager = jq.JobQueueManager(FLAGS, trace_path)
+
     jobs_manager = am.JobsManager(jq_manager)
     scheduler = sche.Scheduler(infrastructure, jobs_manager)
     scheduler.sort_job_trace()
@@ -1779,7 +1721,8 @@ def main(log_manager):
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)  # pylint: disable=line-too-long
     execution_id = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')
-    output_dir = os.path.join(FLAGS.log_path, execution_id)
+    output_dir = os.path.join('log', FLAGS.log_path)
+    output_dir = os.path.join(output_dir, execution_id)
     util.make_dir_if_not_exist(output_dir)
     log_file = os.path.join(output_dir, 'output.log')
     filehandler = logging.FileHandler(

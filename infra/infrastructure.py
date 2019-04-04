@@ -26,7 +26,7 @@ class Infrastructure(object):
         self.racks = {}
         self.nodes = {}
         self.num_switch = self.flags.num_switch
-        self.rack_bandwidth = self.flags.rack_bandwidth
+        self.bandwidth = self.flags.bandwidth
         self.num_nodes_p_switch = self.flags.num_node_p_switch
         self.num_cpu_p_node = self.flags.num_cpu_p_node
         self.num_gpu_p_node = self.flags.num_gpu_p_node
@@ -64,7 +64,7 @@ class Infrastructure(object):
         f_handler.close()
 
         for rack_id in range(0, self.num_switch):
-            rack = r.Rack(str(rack_id), self.rack_bandwidth)
+            rack = r.Rack(str(rack_id), self.bandwidth)
             for node_id in range(0, self.num_nodes_p_switch):
                 node = n.Node(str(node_id), self.num_cpu_p_node, self.num_gpu_p_node, self.mem_p_node)
                 self.nodes[str(node_id)] = node

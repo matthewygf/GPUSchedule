@@ -1,4 +1,3 @@
-from infra.node import _Node
 from core import flags
 from core import util
 from core import job

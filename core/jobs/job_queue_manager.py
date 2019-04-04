@@ -1,11 +1,12 @@
 import os
 import csv
 from core import util
-from core import job
+from core.jobs import job
 
 class JobQueueManager(object):
-    """A job queue object 
-    that host all the jobs instead of wacky list, or dictionaries"""
+    """
+    A job queue object
+    that host all the jobs instead of wacky lists, or dictionaries"""
     def __init__(self, flags, file_path=None, num_queue=1): 
         self.flags = flags
         if file_path is None:
@@ -80,19 +81,19 @@ class JobQueueManager(object):
         #         num += len(q)
         return num
 
-    def _add(self, queue_idx, job):
+    def _add(self, queue_idx, new_job):
         if self._can_add(queue_idx):
-            self.queues[queue_idx].append(job)
+            self.queues[queue_idx].append(new_job)
         else:
             raise ArithmeticError()
 
-    def _add_to_job_queue(self, job, queue_idx=None):
+    def _add_to_job_queue(self, new_job, queue_idx=None):
         """Args:
             queue_idx: if specified, added to specific queue"""
         if queue_idx is not None:
-            self._add(queue_idx, job)
+            self._add(queue_idx, new_job)
         else:
-            self._add(0, job)
+            self._add(0, new_job)
 
     def _setup(self):
         self.parse_job_file()

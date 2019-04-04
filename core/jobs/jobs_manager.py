@@ -2,6 +2,8 @@ from core import util
 class JobsManager(object):
     """
     This acts like the Application/Framework master
+    NOTE: All jobs right now follows parameter server frameworks.
+    TODO: Allreduce NCCL jobs
     """
     def __init__(self, job_queue_manager):
         self.job_queue_manager = job_queue_manager

@@ -1,15 +1,17 @@
-from core import util
-from core import lp
-from core import flags
-from core import algorithm
 import time
+from core.scheduling import algorithm
+from core import flags
+from core import util
+from core.network import network_service
 
 FLAGS = flags.FLAGS
+
 
 class Scheduler(object):
     """
     Scheduler object to manage jobs and schedule placements
     """
+
     def __init__(self, infrastructure, jobs_manager):
         self.infrastructure = infrastructure
         # jobs manager maintains running jobs / finished jobs
@@ -38,14 +40,13 @@ class Scheduler(object):
         jobs_all = self.jobs_manager.total_jobs(delta)
         scheduling_algo = algorithm.scheduling_algorithms[self.schedule]
         placement_algo = algorithm.placement_algorithms[self.placement]
-        nodes, network_costs, job_id, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager, delta)
+        nodes, job, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager,delta)
         if success:
-            #TODO: network_COSTS
-            self.add_to_running(nodes, job_id)
+            network_service.calculate_network_costs(self.infrastructure, nodes, job)
+            self.add_to_running(nodes, job.job_id)
         else:
-            assert(jobs_all == self.jobs_manager.total_jobs(delta))
+            assert (jobs_all == self.jobs_manager.total_jobs(delta))
 
-    
     def _gen_jobs(self, delta_time):
         self.jobs_manager.gen_jobs(delta_time)
 
@@ -75,14 +76,14 @@ class Scheduler(object):
     def add_to_running(self, nodes, job_id):
         for k, v in iter(nodes.items()):
             self.jobs_manager.start_job(v, job_id)
-            assert(k in self.jobs_manager.busy_nodes)
-    
+            assert (k in self.jobs_manager.busy_nodes)
+
     def _clear_nodes(self):
         for k, v in iter(self.infrastructure.nodes.items()):
             if len(v.running_tasks) == 0:
                 v.reset_resource()
             else:
-                sum_workers =  sum([1 for w in iter(v.running_tasks.values()) if not w.is_ps])
+                sum_workers = sum([1 for w in iter(v.running_tasks.values()) if not w.is_ps])
                 if sum_workers != v.gpu_used:
                     v.reset_resource(sum_workers)
 
@@ -103,8 +104,9 @@ class Scheduler(object):
             # HACK
             self._clear_nodes()
             if current_remaining > 0:
+                # TODO: this will likely to be changed
                 self._schedule(delta_time)
-            new_current_remaining = self.jobs_manager.total_jobs(delta_time) 
+            new_current_remaining = self.jobs_manager.total_jobs(delta_time)
             time.sleep(1)
             end_time = time.time()
             self.release_finished_jobs(end_time)
@@ -112,22 +114,20 @@ class Scheduler(object):
             current_remaining = new_current_remaining
             running_jobs = len(self.jobs_manager.running_jobs)
             self.pending_time = self.jobs_manager.average_pending_time()
-            #assert running_jobs > 0            
             steps += 1
             util.print_fn("Remaining jobs: %d, Running Jobs: %d Finished Jobs %d" %
-                        (new_current_remaining, running_jobs, len(self.jobs_manager.finished_jobs)))
+                          (new_current_remaining, running_jobs, len(self.jobs_manager.finished_jobs)))
             util.print_fn(self.jobs_manager.running_jobs.keys())
             for k, v in iter(self.infrastructure.nodes.items()):
-                util.print_fn("Node %s is %s, GPU used %d, each node has tasks %s" % 
-                        (k, 
-                            'busy' if len(v.running_tasks) > 0 else 'free',
-                            v.gpu_used,
-                            str(v.running_tasks.keys())))
-                    
+                util.print_fn("Node %s is %s, GPU used %d, each node has tasks %s" %
+                              (k,
+                               'busy' if len(v.running_tasks) > 0 else 'free',
+                               v.gpu_used,
+                               str(v.running_tasks.keys())))
+
         finished_time = time.time()
         total_time_taken = finished_time - start_time
         util.print_fn("Total Time Taken in seconds: %d" % total_time_taken)
 
     def sort_job_trace(self):
         self.jobs_manager.sort_job_trace()
-        

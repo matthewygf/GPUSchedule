@@ -1,4 +1,4 @@
-"""in MegaByte"""
+"""in MegaBytes"""
 model_sizes = {
     #https://s3.amazonaws.com/opennmt-models/onmt_esfritptro-4-1000-600_epoch13_3.12_release_v2.t7
     '4_layers_brnn': 1300,
@@ -28,8 +28,8 @@ model_sizes = {
     'vgg19': 549,
     #http://download.tensorflow.org/models/vgg_16_2016_08_28.tar.gz
     'vgg16': 528,
-    #http://download.tensorflow.org/models/resnet_v2_50_2017_04_14.tar.gz
-    'resnet50':309,
+    #http://download.tensorflow.org/models/resnet_v1_50_2016_08_28.tar.gz
+    'resnet50': 97,
     #http://download.tensorflow.org/models/resnet_v2_101_2017_04_14.tar.gz
     'resnet101': 555,
     #http://download.tensorflow.org/models/resnet_v2_152_2017_04_14.tar.gz

@@ -1,4 +1,3 @@
-import subprocess
 from subprocess import Popen
 import os
 import time
@@ -8,7 +7,7 @@ def main():
     trace_file = '60'
     scheme = 'yarn'
     schedule = 'fifo'
-    log_path = cluster_spec + "_job_" + trace_file + "/" +scheme + "_" + schedule
+    log_path = cluster_spec + "_job_" + trace_file + "/" + scheme + "_" + schedule
     python_ex = 'python.exe' if os.name == 'nt' else 'python3'
     cmd = [
         python_ex, 'run_sim.py',
@@ -25,7 +24,6 @@ def main():
     while poll is None:
         time.sleep(5)
         poll = p.poll()
-        #print("process pid %d still running" % pid)
-    
+
 if __name__ == "__main__":
     main()
