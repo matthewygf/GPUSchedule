@@ -31,7 +31,7 @@ class Task(object):
         self.running = False
         self.finished = False
         self.migration_count = 0
-    
+
     def execute(self):
         self.start_time = time.time()
         self.migration_count += 1
@@ -51,6 +51,7 @@ class Job(object):
         if less than 4, then it is between model replica, no need ps.
     5. assume each task (ps, workers) have same amount of cpu.
     6. assume each task (ps, workers) have same amount of mem.
+    7. assume Synchronize SGD.
     TODO:
     #http://arxiv.org/abs/1807.11205
     1. All reduce jobs
@@ -72,6 +73,7 @@ class Job(object):
         self.finished = False
         self.failed_schedule = 0
         self.start_time = 0
+        self.interations = iterations
         self.duration = int(duration)
         self.submit_time = int(submit_time)
         self.pending_time = 0.0
@@ -145,6 +147,12 @@ class Job(object):
             self.running = True
             return True, executed_tasks_count
         return False, executed_tasks_count
+
+    def add_network_costs(self, extra_s):
+        self.duration += extra_s
+
+    def is_distributed(self):
+        return self.task_count > 1
 
     def restart(self):
         self.running = True

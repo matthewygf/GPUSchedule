@@ -66,7 +66,7 @@ class Infrastructure(object):
         for rack_id in range(0, self.num_switch):
             rack = r.Rack(str(rack_id), self.bandwidth)
             for node_id in range(0, self.num_nodes_p_switch):
-                node = n.Node(str(node_id), self.num_cpu_p_node, self.num_gpu_p_node, self.mem_p_node)
+                node = n.Node(rack.rack_id, str(node_id), self.num_cpu_p_node, self.num_gpu_p_node, self.mem_p_node)
                 self.nodes[str(node_id)] = node
                 rack.add_node(node)
             self.racks[str(rack_id)] = rack

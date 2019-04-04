@@ -42,7 +42,8 @@ class Scheduler(object):
         placement_algo = algorithm.placement_algorithms[self.placement]
         nodes, job, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager,delta)
         if success:
-            network_service.calculate_network_costs(self.infrastructure, nodes, job)
+            extras = network_service.calculate_network_costs(self.infrastructure, job)
+            job.add_network_costs(extras)
             self.add_to_running(nodes, job.job_id)
         else:
             assert (jobs_all == self.jobs_manager.total_jobs(delta))

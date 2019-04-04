@@ -4,6 +4,7 @@ GPU cluster simulator for distributed deep learning training
 1. Homogenous cluster set up
 2. model gradients transfer is the same as the model size saved in ckpts (model_factory)
 3. Parameter Server / Worker frameworks (All-reduce not yet implemented)
+4. **Synchronize SGD**
 
 **Execution**
 1. Before the exection, what's needed?

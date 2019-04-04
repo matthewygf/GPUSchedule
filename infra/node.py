@@ -4,12 +4,12 @@ import time
 
 
 class Node(object):
-    def __init__(self, node_id, cpus=0, gpus=0, memory=0):
+    def __init__(self, rack_id, node_id, cpus=0, gpus=0, memory=0):
         self.node_id = str(node_id)
         self.cpu_count = cpus
         self.gpu_count = gpus
         self.mem_size = memory
-
+        self.rack_id = rack_id
         self.network_usage = 0
         self.cpu_used = 0
         self.gpu_used = 0
