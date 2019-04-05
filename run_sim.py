@@ -55,13 +55,13 @@ flags.DEFINE_integer('num_switch', 1, '''Part of cluster spec: the number of swi
 flags.DEFINE_integer('num_node_p_switch', 32,
                      '''Part of cluster spec: the number of nodes under a single switch, default is 32''')
 
-flags.DEFINE_integer('bandwidth', 10000,
+flags.DEFINE_integer('bandwidth', 1250,
                      '''
-                     Bandwidth per rack in Mbps, default 10Gbps
+                     Bandwidth per rack in MBps, default 10Gbps (GigaBit)
                      http://arxiv.org/abs/1805.07891 
-                     modern is about 10GBps 
+                     modern is about 10Gbps 
                      ''')
-flags.DEFINE_float('internode_latency', 0.025,
+flags.DEFINE_float('internode_latency', 0.015,
                      '''
                      internode, within the same rack, should there be latency
                      in seconds

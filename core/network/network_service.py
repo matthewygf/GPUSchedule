@@ -6,7 +6,7 @@ def calculate_network_costs(infrastructure, job):
             calculate the slow down given nodes are assigned,
             very basic network cost model,
             2 is round trip.
-            basic = (datasize/bandwidth * job_iteration * 2) + crossracks_deviation
+            basic = (datasize/bandwidth * job_iteration * 2)
     """
     # let's check where the PS is, if there is a PS.
 
