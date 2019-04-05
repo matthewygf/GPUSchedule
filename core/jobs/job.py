@@ -152,7 +152,7 @@ class Job(object):
         self.duration += extra_s
 
     def is_distributed(self):
-        return self.task_count > 1
+        return self.ps_count > 1
 
     def restart(self):
         self.running = True
