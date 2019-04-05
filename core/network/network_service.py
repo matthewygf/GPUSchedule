@@ -9,7 +9,6 @@ def calculate_network_costs(infrastructure, job):
             basic = (datasize/bandwidth * job_iteration * 2)
     """
     # let's check where the PS is, if there is a PS.
-
     if not job.is_distributed():
         return 0
 

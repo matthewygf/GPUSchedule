@@ -28,6 +28,7 @@ class Infrastructure(object):
         self.num_switch = self.flags.num_switch
         self.bandwidth = self.flags.bandwidth
         self.internode_latency = self.flags.internode_latency
+        self.enable_network_costs = self.flags.enable_network_costs
         self.num_nodes_p_switch = self.flags.num_node_p_switch
         self.num_cpu_p_node = self.flags.num_cpu_p_node
         self.num_gpu_p_node = self.flags.num_gpu_p_node
@@ -64,11 +65,13 @@ class Infrastructure(object):
             self.mem_p_node = int(row['mem_p_node'])
         f_handler.close()
 
+        nodes = 0
         for rack_id in range(0, self.num_switch):
             rack = r.Rack(str(rack_id), self.bandwidth)
             for node_id in range(0, self.num_nodes_p_switch):
-                node = n.Node(rack.rack_id, str(node_id), self.num_cpu_p_node, self.num_gpu_p_node, self.mem_p_node)
-                self.nodes[str(node_id)] = node
+                nodes += 1
+                node = n.Node(rack.rack_id, str(nodes), self.num_cpu_p_node, self.num_gpu_p_node, self.mem_p_node)
+                self.nodes[str(nodes)] = node
                 rack.add_node(node)
             self.racks[str(rack_id)] = rack
 
@@ -79,6 +82,8 @@ class Infrastructure(object):
         util.print_fn("num_gpu_p_node in cluster: %d" % first_rack_first_node.gpu_count)
         util.print_fn("num_cpu_p_node in cluster: %d" % first_rack_first_node.cpu_count)
         util.print_fn("mem_p_node in cluster: %d" %  first_rack_first_node.mem_size)
+        util.print_fn("Total nodes in cluster: %d " % len(self.nodes) )
+        util.print_fn("Total racks in cluster: %d " % len(self.racks))
         util.print_fn('--------------------------------- End of cluster spec ---------------------------------')
 
     def get_available_cpu_count(self):
