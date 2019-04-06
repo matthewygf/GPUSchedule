@@ -68,7 +68,11 @@ flags.DEFINE_float('internode_latency', 0.015,
                      internode, within the same rack, should there be latency
                      in seconds
                      ''')
-
+flags.DEFINE_integer('gpu_memory_capacity', 11,
+                     '''
+                     Specify GPU memory capacity to calculate the average utilization,
+                     will be used in packing scheme.
+                     ''')
 flags.DEFINE_integer('num_gpu_p_node', 8,
                 '''Part of cluster spec: the number of gpus on each node, default is 8''')
 flags.DEFINE_integer('num_cpu_p_node', 64,

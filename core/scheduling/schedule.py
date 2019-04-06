@@ -106,8 +106,6 @@ class Scheduler(object):
             # 4. TODO: stochastic job arrival process
             self._gen_jobs(delta_time)
             time.sleep(1)
-            # HACK
-            self._clear_nodes()
             if current_remaining > 0:
                 # TODO: this will likely to be changed
                 self._schedule(delta_time)
@@ -124,11 +122,12 @@ class Scheduler(object):
                           (new_current_remaining, running_jobs, len(self.jobs_manager.finished_jobs)))
             util.print_fn(self.jobs_manager.running_jobs.keys())
             for k, v in iter(self.infrastructure.nodes.items()):
-                util.print_fn("Node %s is %s, GPU used %d, each node has tasks %s" %
+                util.print_fn("Node %s is %s, GPU used %d, each node has tasks %s, gpu_utilizations %s" %
                               (k,
                                'busy' if len(v.running_tasks) > 0 else 'free',
                                v.gpu_used,
-                               str(v.running_tasks.keys())))
+                               str(v.running_tasks.keys()),
+                               str(v.gpu_mem_utilizations)))
 
         finished_time = time.time()
         total_time_taken = finished_time - start_time

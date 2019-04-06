@@ -32,6 +32,10 @@ class JobsManager(object):
             # this node has started some tasks, so it is busy
             if node.node_id not in self.busy_nodes:
                 self.busy_nodes.append(node.node_id)
+                # because we have started tasks,
+                # CUDA would have been allocated,
+                # we estimate how much a task would use up the gpu utilz
+                node.estimate_gpu_utilization()
         
         # This case is when some tasks are ready, but not all.
         if executed_job is None:
@@ -61,7 +65,8 @@ class JobsManager(object):
         jobs_to_finish = []
         for k, v, in iter(self.running_jobs.items()):
             duration = current_time - v.start_time
-            if duration < (v.duration / 10): continue
+            # replay faster.
+            if duration < (v.duration / 5): continue
             jobs_to_finish.append(v)
         return jobs_to_finish
 

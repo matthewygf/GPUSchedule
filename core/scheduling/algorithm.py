@@ -5,7 +5,6 @@ from core import util
 # TODO: GANDIVA, TOPOLOGY
 def ms_yarn_placement(infrastructure, next_job):
     gpu_demand = next_job.gpus
-    success = False
     try_alloc_ms = try_cross_node_alloc_ms if gpu_demand > infrastructure.num_gpu_p_node else try_single_node_alloc_ms
     nodes, success = try_alloc_ms(infrastructure, next_job)
     return nodes, success
