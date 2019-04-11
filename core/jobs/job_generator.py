@@ -1,28 +1,37 @@
+"""
+Job Generator, generates traces from sample population and distributions
+"""
 import numpy as np
-from random import choices
+import random
+__author__ = "Dominic Lindsay (Babbleshack)"
+__email__ = "dcrl94@gmail.com"
 
-class JobGenarator(object):
+class JobGenerator(object):
     """
     A Job Generator
     Generates jobs from known distributions.
     """
     def __init__(self):
         #Default Samples
-        self.MODEL_SAMPLE_DEF = []
-        self.ITTER_SAMPLE_DEF = [1,1,1,1,1,1, 109, 126, 133, 138, 141, 143, 144, 147,
-                                 157, 168, 175, 192, 193, 198, 235, 237, 242, 253,
-                                 258, 272, 272, 274, 288, 326, 326, 362, 386, 391,
-                                 410, 438, 447, 468, 473, 513, 513, 521, 521, 525,
-                                 581, 606, 607, 775, 775, 789, 822, 864, 864, 892,
-                                 903, 949, 1011, 1085, 1360, 1501, 2178, 2239, 2275,
-                                 3304, 3469, 4861]
-
-        self.DURATION_SAMPLE_DEF = [121, 121, 121, 121, 121, 121, 121, 121, 121, 121, 121, 121,
-                                    121, 121, 121, 121, 121, 121, 121, 121, 121, 122, 122, 122,
-                                    122, 123, 123, 123, 124, 125, 125, 126, 126, 126, 126, 127,
-                                    128, 130, 131, 133, 135, 138, 141, 143, 147, 152, 155, 158,
-                                    164, 171, 180, 189, 196, 209, 230, 263, 305, 368, 536,
-                                    1800]
+        self.MODEL_SAMPLE_DEF = [1.04, 1.27, 15.36, 108.48, 125.16, 125.16,
+                                 237.61, 330.52, 364.2, 462.77, 544.24, 636.75,
+                                 664.1, 700., 798.28, 862.95]
+        self.ITTER_SAMPLE_DEF = [1,1,1,1,1,1, 109, 126, 133, 138, 141, 143,
+                                 144, 147, 157, 168, 175, 192, 193, 198, 235,
+                                 237, 242, 253, 258, 272, 272, 274, 288, 326,
+                                 326, 362, 386, 391, 410, 438, 447, 468, 473,
+                                 513, 513, 521, 521, 525, 581, 606, 607, 775,
+                                 775, 789, 822, 864, 864, 892, 903, 949, 1011,
+                                 1085, 1360, 1501, 2178, 2239, 2275, 3304,
+                                 3469, 4861]
+        self.DURATION_SAMPLE_DEF = [121, 121, 121, 121, 121, 121, 121, 121,
+                                    121, 121, 121, 121, 121, 121, 121, 121,
+                                    121, 121, 121, 121, 121, 122, 122, 122,
+                                    122, 123, 123, 123, 124, 125, 125, 126,
+                                    126, 126, 126, 127, 128, 130, 131, 133,
+                                    135, 138, 141, 143, 147, 152, 155, 158,
+                                    164, 171, 180, 189, 196, 209, 230, 263,
+                                    305, 368, 536, 1800]
         self.ARRIVAL_SAMPLE_DEF = [10, 100, 500,1000, 3000, 5000, 10000]
         #Default Distributions
         self.MODEL_DIST_DEF = self.cdf(self.MODEL_SAMPLE_DEF)
@@ -43,71 +52,82 @@ class JobGenarator(object):
         """Calculate Cumalative Distribution Function of Samples
         """
         samples_s = np.sort(samples)
-        cdf = 1. * np.arange(len(cdf)) / (len(cdf) - 1)
+        cdf = 1. * np.arange(len(samples)) / (len(samples) - 1)
         return cdf
 
+    def get_model_distribution(self):
+        return self.model_distribution
+
+    def get_duration_distribution(self):
+        return self.duration_distribution
+
+    def get_itter_distribution(self):
+        return self.itter_distribution
+
+    def get_arrival_distribution(self):
+        return self.arrival_distribution
+
+    def get_model_samples(self):
+        return self.model_samples
+
+    def get_duration_samples(self):
+        return self.duration_samples
+
+    def get_itter_samples(self):
+        return self.itter_samples
+
+    def get_arrival_samples(self):
+        return self.arrival_samples
+
     def set_model_distribution(self, samples):
+        """Set model distribution.
+        Calculate cumaltive distribution over sample population
+        samples: list, a list of samples
+        also set population to sample
+        """
         cdf = self.cdf(samples)
         self.model_samples = samples
         self.model_distribution = cdf
 
     def set_duration_distribution(self, samples):
+        """Set duration distribution.
+        Calculate cumaltive distribution over sample population
+        samples: list, a list of samples
+        also set population to sample
+        """
         cdf = self.cdf(samples)
         self.duration_samples = samples
         self.duration_distribution = cdf
 
     def set_itter_distribution(self, samples):
+        """Set itter distribution.
+        Calculate cumaltive distribution over sample population
+        samples: list, a list of samples
+        also set population to sample
+        """
         cdf = self.cdf(samples)
         self.itter_samples = samples
         self.itter_distribution = cdf
 
     def set_arrival_distribution(self, samples):
+        """Set arrival distribution.
+        Calculate cumaltive distribution over sample population
+        also set population to sample
+        samples: list, a list of samples
+        """
         cdf = self.cdf(samples)
         self.arrival_samples = samples
         self.arrival_distribution = cdf
 
-    def generate_model_samples(self, number):
-        """Generate models based from CDF
+    def generate_samples(self, number, population, distribution):
+        """Generate samples based on population and distribution
         """
-        if not self.model_samples or not self.model_distribution:
-            raise Exception("Error model distribution/samples not set")
-        elif number < len(self.model_samples):
-            print("WARN: generating fewer samples then distribution")
-        samples = choices(self.model_samples,
-                          cum_weights=self.model_distribution, k=number)
-        return samples
-
-    def generate_duration_samples(self, number):
-        """Generate durations based from CDF
-        """
-        if not self.duration_samples or not self.duration_distribution:
-            raise Exception("Error duration distribution/samples not set")
-        elif number < len(self.duration_samples):
-            print("WARN: generating fewer samples then distribution")
-        samples = choices(self.duration_samples,
-                          cum_weights=self.duration_distribution, k=number)
-        return samples
-
-    def generate_itter_samples(self, number):
-        """Generate itters based from CDF
-        """
-        if not self.itter_samples or not self.itter_distribution:
-            raise Exception("Error itter distribution/samples not set")
-        elif number < len(self.itter_samples):
-            print("WARN: generating fewer samples then distribution")
-        samples = choices(self.itter_samples,
-                          cum_weights=self.itter_distribution, k=number)
-        return samples
-
-    def generate_arrival_samples(self, number):
-        """Generate arrivals based from CDF
-        """
-        if not self.arrival_samples or not self.arrival_distribution:
-            raise Exception("Error arrival distribution/samples not set")
-        elif number < len(self.arrival_samples):
-            print("WARN: generating fewer samples then distribution")
-        samples = choices(self.arrival_samples,
-                          cum_weights=self.arrival_distribution, k=number)
+        if not any(population) or not any(distribution):
+            raise Exception("Error population and samples cannot be null")
+        elif number < len(population):
+            print("WARN: generating fewer samples then population")
+        samples = random.choices(population,
+                          cum_weights=distribution, k=number)
         return samples
 
     def generate_trace(self, number):
@@ -120,8 +140,18 @@ class JobGenarator(object):
             "arrival": samples - list
         }"""
         trace = {}
-        trace["model"] = self.generate_model_samples(number)
-        trace["duration"] = self.generate_duration_samples(number)
-        trace["itter"] = self.generate_itter_samples(number)
-        trace["arrival"] = self.generate_arrival_samples(number)
+        trace["model"] = self.generate_samples(number, self.model_samples, self.model_distribution)
+        trace["duration"] = self.generate_samples(number, self.duration_samples, self.duration_distribution)
+        trace["itter"] = self.generate_samples(number, self.itter_samples, self.itter_distribution)
+        trace["arrival"] = self.generate_samples(number, self.arrival_samples, self.arrival_distribution)
+        #TODO: update to normal distribition
+        trace["num_gpu"] = []
+        trace["interval"] = []
+        trace["job_id"] = []
+        for i in range(number):
+            trace["num_gpu"].append(random.randrange(1, 128))
+        for i in range(number):
+            trace["interval"].append(random.randrange(20, 44))
+        for i in range(number):
+            trace["job_id"].append(i)
         return trace
