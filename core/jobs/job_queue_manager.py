@@ -2,12 +2,13 @@ import os
 import csv
 from core import util
 from core.jobs import job
+from core.jobs import job_generator
 
 class JobQueueManager(object):
     """
     A job queue object
     that host all the jobs instead of wacky lists, or dictionaries"""
-    def __init__(self, flags, file_path=None, num_queue=1): 
+    def __init__(self, flags, file_path=None, num_queue=1):
         self.flags = flags
         if file_path is None:
             project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
@@ -15,13 +16,11 @@ class JobQueueManager(object):
             self.file_path = trace_path
         else:
             self.file_path = file_path
-     
         self.num_queue = num_queue
         self.queues = []
         self.queues = [list() for i in range(self.num_queue)]
         self.queue_limit = [3250, 7200, 18000]
         self._setup()
-        
         #TODO: whats to do with the workers and gittins
         # mem info in GB
         # self.worker_mem = 5
@@ -46,7 +45,7 @@ class JobQueueManager(object):
         ''' Add job from job trace file'''
         keys = reader.fieldnames
         util.print_fn(
-            '--------------------------------- Read TF jobs from: %s ---------------------------------' 
+            '--------------------------------- Read TF jobs from: %s ---------------------------------'
             % os.path.basename(self.file_path))
         util.print_fn('    we get the following fields:\n        %s' % keys)
         for row in reader:
@@ -64,6 +63,14 @@ class JobQueueManager(object):
         submit_time = job_dict['submit_time']
         iterations = float(job_dict['iterations'])
         return job.Job(idx, model, duration, iterations, interval, submit_time, gpu=num_gpus)
+
+    def generate_jobs(self, number):
+        """Generate `number` jobs
+        """
+        jobs = self.job_generator.generate_trace(number)
+        for job in jobs:
+            p_job = self.parse_job(job)
+            self._add_to_job_queue(p_job)
 
     def _can_add(self, queue_idx):
             return len(self.queues[queue_idx]) < self.queue_limit[queue_idx]
@@ -96,10 +103,10 @@ class JobQueueManager(object):
             self._add(0, new_job)
 
     def _setup(self):
-        self.parse_job_file()
+        self.job_generator = job_generator.JobGenerator()
 
     def pop(self, queue_idx=0, job_in_queue=0):
         return self.queues[queue_idx].pop(job_in_queue)
-    
+
     def insert(self, job, queue_idx=0, job_in_queue=0):
         return self.queues[queue_idx].insert(job_in_queue, job)
