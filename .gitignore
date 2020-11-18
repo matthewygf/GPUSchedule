@@ -10,3 +10,4 @@ log/**/*.csv
 **/*.json
 *.json
 *.vscode
+data/*.csv

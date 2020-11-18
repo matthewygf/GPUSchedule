@@ -34,17 +34,48 @@ class Infrastructure(object):
         self.num_cpu_p_node = self.flags.num_cpu_p_node
         self.num_gpu_p_node = self.flags.num_gpu_p_node
         self.mem_p_node = self.flags.mem_p_node
-        self._setup_nodes(flags.cluster_spec)
-
-    def _setup_nodes(self, file_path):
-        """read from a csv to init infrastructure"""
-        if not os.path.exists(file_path):
-            assert ValueError()
+        self.cluster_spec = self.flags.cluster_spec
+        self._setup_nodes()
+    
+    def _init_nodes(self):
         
+        nodes = 0
+        for rack_id in range(0, self.num_switch):
+            rack = r.Rack(str(rack_id), self.bandwidth)
+            for _ in range(0, self.num_nodes_p_switch):
+                nodes += 1
+                node = n.Node(rack.rack_id, str(nodes),
+                              self.gpu_memory_capacity,
+                              self.num_cpu_p_node, self.num_gpu_p_node,
+                              self.mem_p_node)
+                self.nodes[str(nodes)] = node
+                rack.add_node(node)
+            self.racks[str(rack_id)] = rack
+
+        util.print_fn("num_racks in cluster: %d" % len(self.racks))
+        first_rack = next(iter(self.racks.values()))
+        first_rack_first_node = next(iter(first_rack.nodes.values()))
+        util.print_fn("num_node_p_rack in cluster: %d" % len(first_rack.nodes))
+        util.print_fn("num_gpu_p_node in cluster: %d" % first_rack_first_node.gpu_count)
+        util.print_fn("num_cpu_p_node in cluster: %d" % first_rack_first_node.cpu_count)
+        util.print_fn("mem_p_node in cluster: %d" %  first_rack_first_node.mem_size)
+        util.print_fn("Total nodes in cluster: %d " % len(self.nodes) )
+        util.print_fn("Total racks in cluster: %d " % len(self.racks))
+        util.print_fn('--------------------------------- End of cluster spec ---------------------------------')
+
+    def _setup_nodes(self):
+        """read from a csv or from flags to init infrastructure"""
+        if not self.cluster_spec or not os.path.exists(self.cluster_spec):
+            self._init_nodes()
+        else:
+            self._init_from_spec_file()
+    
+    def _init_from_spec_file(self):
+        file_path = self.cluster_spec
         project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
         spec_file = os.path.join(project_dir, file_path)
 
-        name, ext = os.path.splitext(spec_file)
+        _, ext = os.path.splitext(spec_file)
         # assume it is csv anyway
         assert 'csv' in ext
         f_handler = open(spec_file, 'r')
@@ -66,29 +97,7 @@ class Infrastructure(object):
             self.mem_p_node = int(row['mem_p_node'])
         f_handler.close()
 
-        nodes = 0
-        for rack_id in range(0, self.num_switch):
-            rack = r.Rack(str(rack_id), self.bandwidth)
-            for node_id in range(0, self.num_nodes_p_switch):
-                nodes += 1
-                node = n.Node(rack.rack_id, str(nodes),
-                              self.gpu_memory_capacity,
-                              self.num_cpu_p_node, self.num_gpu_p_node,
-                              self.mem_p_node)
-                self.nodes[str(nodes)] = node
-                rack.add_node(node)
-            self.racks[str(rack_id)] = rack
-
-        util.print_fn("num_racks in cluster: %d" % len(self.racks))
-        first_rack = next(iter(self.racks.values()))
-        first_rack_first_node = next(iter(first_rack.nodes.values()))
-        util.print_fn("num_node_p_rack in cluster: %d" % len(first_rack.nodes))
-        util.print_fn("num_gpu_p_node in cluster: %d" % first_rack_first_node.gpu_count)
-        util.print_fn("num_cpu_p_node in cluster: %d" % first_rack_first_node.cpu_count)
-        util.print_fn("mem_p_node in cluster: %d" %  first_rack_first_node.mem_size)
-        util.print_fn("Total nodes in cluster: %d " % len(self.nodes) )
-        util.print_fn("Total racks in cluster: %d " % len(self.racks))
-        util.print_fn('--------------------------------- End of cluster spec ---------------------------------')
+        self._init_nodes()
 
     def get_available_cpu_count(self):
         result = 0

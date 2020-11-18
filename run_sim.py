@@ -1,10 +1,7 @@
 import csv
-import re
 import sys
-import types
 import time
 import math
-import argparse
 import copy
 import os
 
@@ -1717,17 +1714,17 @@ def main(log_manager):
     # init Logging
     log_manager.init(infrastructure)
 
-    # NOTE: init scheduler and jobs
-    project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-    trace_path = os.path.join(project_dir, FLAGS.trace_file)
-    jq_manager = jq.JobQueueManager(FLAGS, trace_path)
+    # # NOTE: init scheduler and jobs
+    # project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    # trace_path = os.path.join(project_dir, FLAGS.trace_file)
+    # jq_manager = jq.JobQueueManager(FLAGS, trace_path)
 
-    jobs_manager = am.JobsManager(jq_manager)
-    scheduler = sche.Scheduler(infrastructure, jobs_manager)
-    scheduler.sort_job_trace()
+    # jobs_manager = am.JobsManager(jq_manager)
+    # scheduler = sche.Scheduler(infrastructure, jobs_manager)
+    # scheduler.sort_job_trace()
     
-    # NOTE: start simulation
-    scheduler.start()
+    # # NOTE: start simulation
+    # scheduler.start()
 
     exit()
 

@@ -3,17 +3,24 @@ import os
 import time
 
 def main():
-    cluster_spec = 'n4g4'
-    trace_file = '60'
+    # cluster_spec = 'n4g4'
+    # trace_file = '60'
+
     scheme = 'yarn'
+    num_nodes_p_switch = 32
+    num_switch = 8
     schedule = 'fifo'
-    log_path = cluster_spec + "_job_" + trace_file + "/" + scheme + "_" + schedule
+    trace_file = 'cleaned_samples_month'
+    log_sub_dir = "nodes_p_s"+str(num_nodes_p_switch) + "_job_" + trace_file
+    log_path = os.path.join(log_sub_dir, f"{scheme}_{schedule}")
     python_ex = 'python.exe' if os.name == 'nt' else 'python3'
     cmd = [
         python_ex, 'run_sim.py',
-        '--cluster_spec', cluster_spec+'.csv',
+        '--num_node_p_switch', str(num_nodes_p_switch),
+        '--num_switch', str(num_switch),
+        # '--cluster_spec', cluster_spec+'.csv',
         '--scheme', scheme,
-        '--trace_file', trace_file+'_job.csv',
+        '--trace_file', os.path.join("data",trace_file+'.csv'),
         '--schedule', schedule,
         '--enable_network_costs', 'True',
         '--log_path', log_path
