@@ -76,3 +76,5 @@ The job trace to simulate. For each job, the simulator needs the following infor
 Others
 --------------
 g.yeung1@lancaster.ac.uk
+James Bulman
+dcrl94@gmail.com

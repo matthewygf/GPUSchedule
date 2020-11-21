@@ -65,11 +65,12 @@ flags.DEFINE_float('internode_latency', 0.015,
                      internode, within the same rack, should there be latency
                      in seconds
                      ''')
-flags.DEFINE_integer('gpu_memory_capacity', 11,
+flags.DEFINE_integer('gpu_memory_capacity', 32,
                      '''
                      Specify GPU memory capacity to calculate the average utilization,
                      will be used in packing scheme.
                      ''')
+flags.DEFINE_integer('num_queue', 1, '''The number of queues within the job manager''')
 flags.DEFINE_integer('num_gpu_p_node', 8,
                 '''Part of cluster spec: the number of gpus on each node, default is 8''')
 flags.DEFINE_integer('num_cpu_p_node', 64,
@@ -1715,16 +1716,16 @@ def main(log_manager):
     log_manager.init(infrastructure)
 
     # # NOTE: init scheduler and jobs
-    # project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-    # trace_path = os.path.join(project_dir, FLAGS.trace_file)
-    # jq_manager = jq.JobQueueManager(FLAGS, trace_path)
+    project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    trace_path = os.path.join(project_dir, FLAGS.trace_file)
+    logging.info(trace_path)
+    jq_manager = jq.JobQueueManager(FLAGS, trace_path)
 
-    # jobs_manager = am.JobsManager(jq_manager)
-    # scheduler = sche.Scheduler(infrastructure, jobs_manager)
-    # scheduler.sort_job_trace()
-    
-    # # NOTE: start simulation
-    # scheduler.start()
+    jobs_manager = am.JobsManager(FLAGS, jq_manager)
+    scheduler = sche.Scheduler(infrastructure, jobs_manager)
+
+    # NOTE: start simulation
+    scheduler.start()
 
     exit()
 

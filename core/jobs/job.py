@@ -16,19 +16,23 @@ class Task(object):
                  job_id,
                  task_id,
                  duration,
-                 is_ps=False,
-                 model_size=0,
+                 gpu_utilization_avg=0,
+                 gpu_utilization_max=0,
+                 gpu_mem_avg=0,
+                 gpu_mem_max=0,
                  cpu=0,
                  mem=0,
                  gpu=0):
         self.job_id = str(job_id)
         self.task_id = str(task_id)
-        self.is_ps = is_ps
         self.cpu = cpu
         self.mem = mem
         self.gpu = gpu
-        self.model_size = model_size
         self.start_time = 0
+        self.gpu_utilization_avg = gpu_utilization_avg
+        self.gpu_utilization_max = gpu_utilization_max
+        self.gpu_mem_avg=gpu_mem_avg
+        self.gpu_mem_max=gpu_mem_max
         self.duration = duration
         self.started = False
         self.running = False
@@ -46,53 +50,46 @@ class Job(object):
     NOTE:
     Assumption:
     1. each GPU is a worker, in reality, this could be different.
-    2. all job is a parameter server approach.
+    2. all job is an all-reduce approach.
     3. if number of gpu required by a job is less than 1,
         assume only 1 gpu, no worker , no ps.
     4. if number of gpu required by a job is greater than 1,
         assumed ps is the mod of num_gpu_p_node,
         if less than 4, then it is between model replica, no need ps.
-    5. assume each task (ps, workers) have same amount of cpu.
-    6. assume each task (ps, workers) have same amount of mem.
+    5. assume each task (e.g. ps, workers) have same amount of cpu.
+    6. assume each task (e.g. ps, workers) have same amount of mem.
     7. assume Synchronize SGD.
-    TODO:
-    #http://arxiv.org/abs/1807.11205
-    1. All reduce jobs
-
-    #http://arxiv.org/abs/1712.01887
-    2. Maybe Deep Gradient Compression (DGC)
     """
     def __init__(self, 
                  job_id, 
-                 model, 
                  duration, 
-                 iterations, 
-                 interval, 
                  submit_time,
-                 gpu=0):
+                 gpu_p_worker=0,
+                 gpu_utilization_avg=0,
+                 gpu_utilization_max=0,
+                 gpu_memory_max=0,
+                 gpu_memory_avg=0,
+                 total_gpus=0):
         self.job_id = str(job_id)
         self.started = False
         self.running = False
         self.finished = False
         self.failed_schedule = 0
         self.start_time = 0
-        self.interations = iterations
         self.duration = int(duration)
         self.submit_time = int(submit_time)
         self.pending_time = 0.0
-        self.model = model
-        self.model_size = model_factory.model_sizes[model]
-        self.is_cnn = self.model in model_factory.cnn_models
         self.migration_count = 0
-        self.ps_count = gpu // 4 if gpu > 1 else 0
-        self.worker_count = gpu 
-        self.gpus = gpu
-        self.task_count = self.ps_count + self.worker_count
-        self.task_id = ['worker' + str(task) if task <= self.worker_count else 'ps' + str(task - self.worker_count) for task in range(1, self.task_count+1) ]
-        self.cpus_per_task = 4 # heuristic
-        self.memory_per_task = 6 # heuristic
-        self.iterations = iterations
-        self.interval = interval
+        self.worker_count = total_gpus // gpu_p_worker 
+        self.gpus = total_gpus
+        self.task_count = self.worker_count
+        self.task_id = ['worker' + str(task) for task in range(0, self.task_count) ]
+        self.gpu_mem_avg = gpu_memory_avg
+        self.gpu_mem_max = gpu_memory_max
+        self.gpu_utilization_avg = gpu_utilization_avg
+        self.gpu_utilization_max = gpu_utilization_max
+        self.cpus_per_task = 12 # avg num cpu core requested 
+        self.memory_per_task = 60 # avg mem requested
         self.tasks_running_on = {}
         self.tasks_finished = 0
         self.tasks = self.setup_tasks()
@@ -106,12 +103,8 @@ class Job(object):
     def setup_tasks(self):
         result = {}
         for taskidx in self.task_id:
-            is_ps = 'ps' in taskidx
-            needgpu = 1 if not is_ps else 0
             t = Task(self.job_id, self.job_id+"_"+taskidx,
-                     self.duration, is_ps,
-                     self.model_size, self.cpus_per_task,
-                     self.memory_per_task, needgpu)
+                     self.duration)
             result[t.task_id] = t 
         return result
 

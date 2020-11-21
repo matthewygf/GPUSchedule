@@ -1,3 +1,4 @@
+import logging
 import time
 from core.scheduling import algorithm
 from core import flags
@@ -40,7 +41,7 @@ class Scheduler(object):
         jobs_all = self.jobs_manager.total_jobs(delta)
         scheduling_algo = algorithm.scheduling_algorithms[self.schedule]
         placement_algo = algorithm.placement_algorithms[self.placement]
-        nodes, job, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager,delta)
+        nodes, job, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager, delta)
         if success:
             if self.infrastructure.enable_network_costs:
                 extras = network_service.calculate_network_costs(self.infrastructure, job)
@@ -51,9 +52,6 @@ class Scheduler(object):
             self.add_to_running(nodes, job.job_id)
         else:
             assert (jobs_all == self.jobs_manager.total_jobs(delta))
-
-    def _gen_jobs(self, delta_time):
-        self.jobs_manager.gen_jobs(delta_time)
 
     def unfinished_node_count(self):
         nodes = self.collate_all_nodes()
@@ -95,7 +93,7 @@ class Scheduler(object):
     def start(self):
         start_time = time.time()
         delta_time = 0
-        current_remaining = self.jobs_manager.total_jobs(delta_time)
+        current_remaining = self.jobs_manager.remaining_jobs(delta_time)
         running_jobs = len(self.jobs_manager.running_jobs)
         steps = 0
         while current_remaining + running_jobs > 0:
@@ -104,34 +102,31 @@ class Scheduler(object):
             # 2. TODO: preempt running jobs 
             # 3. TODO: migrate running jobs
             # 4. TODO: stochastic job arrival process
-            self._gen_jobs(delta_time)
-            time.sleep(1)
-            if current_remaining > 0:
+            generated_num = self.jobs_manager.gen_jobs(delta_time)
+            if generated_num > 0:
                 # TODO: this will likely to be changed
                 self._schedule(delta_time)
-            new_current_remaining = self.jobs_manager.total_jobs(delta_time)
-            time.sleep(1)
+            new_current_remaining = self.jobs_manager.remaining_jobs(delta_time)
+            logging.info("current remaining: %d" % new_current_remaining)
             end_time = time.time()
-            self.release_finished_jobs(end_time)
-            delta_time = end_time - start_time
+            # self.release_finished_jobs(end_time)
+            delta_time += 1
             current_remaining = new_current_remaining
             running_jobs = len(self.jobs_manager.running_jobs)
-            self.pending_time = self.jobs_manager.average_pending_time()
-            steps += 1
-            util.print_fn("Remaining jobs: %d, Running Jobs: %d Finished Jobs %d" %
-                          (new_current_remaining, running_jobs, len(self.jobs_manager.finished_jobs)))
-            util.print_fn(self.jobs_manager.running_jobs.keys())
-            for k, v in iter(self.infrastructure.nodes.items()):
-                util.print_fn("Node %s is %s, GPU used %d, each node has tasks %s, gpu_utilizations %s" %
-                              (k,
-                               'busy' if len(v.running_tasks) > 0 else 'free',
-                               v.gpu_used,
-                               str(v.running_tasks.keys()),
-                               str(v.gpu_mem_utilizations)))
+            # self.pending_time = self.jobs_manager.average_pending_time()
+            # steps += 1
+            # util.print_fn("Remaining jobs: %d, Running Jobs: %d Finished Jobs %d" %
+            #               (new_current_remaining, running_jobs, len(self.jobs_manager.finished_jobs)))
+            # util.print_fn(self.jobs_manager.running_jobs.keys())
+            # for k, v in iter(self.infrastructure.nodes.items()):
+            #     util.print_fn("Node %s is %s, GPU used %d, each node has tasks %s, gpu_utilizations %s" %
+            #                   (k,
+            #                    'busy' if len(v.running_tasks) > 0 else 'free',
+            #                    v.gpu_used,
+            #                    str(v.running_tasks.keys()),
+            #                    str(v.gpu_mem_utilizations)))
 
         finished_time = time.time()
         total_time_taken = finished_time - start_time
         util.print_fn("Total Time Taken in seconds: %d" % total_time_taken)
 
-    def sort_job_trace(self):
-        self.jobs_manager.sort_job_trace()

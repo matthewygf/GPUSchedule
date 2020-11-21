@@ -1,8 +1,13 @@
 """
 Job Generator, generates traces from sample population and distributions
 """
+import logging
 import numpy as np
 import random
+import pandas as pd
+import sys
+import os
+
 __author__ = "Dominic Lindsay (Babbleshack)"
 __email__ = "dcrl94@gmail.com"
 
@@ -155,3 +160,45 @@ class JobGenerator(object):
         for i in range(number):
             trace["job_id"].append(i)
         return trace
+
+
+class JobTraceReader(object):
+    """
+    A reader that takes into a trace file and iterate through the rows
+    """
+    def __init__(self, file_path) -> None:
+        if not os.path.exists(file_path):
+            logging.error(f"file: {file_path} not exist")
+            sys.exit(1)
+
+        try:
+            self.trace_df = pd.read_csv(file_path)
+            self.delta_time_offset = 0
+        except :
+            logging.error(f"unable to read the file, assumed it was csv. but got {file_path}")
+            sys.exit(1)
+    
+    def prepare_jobs(self):
+        logging.info("original: %d" % len(self.trace_df))
+        self.trace_df = self.trace_df[self.trace_df["type"] == "noninteractive"]
+        logging.info("only batch: %d" % len(self.trace_df))
+        self.trace_df.sort_values(by="normalized_time", inplace=True)
+        self.trace_df.dropna(inplace=True)
+        logging.info("dropped nan: %d" % len(self.trace_df))
+        self.trace_df["normalized_time"] /= self.trace_df["normalized_time"].min()
+        logging.info("Finished Prepping...")
+        self.trace_df["generated"] = 0
+    
+    def remaining_jobs(self):
+        return len(self.trace_df[self.trace_df["generated"] == 0])
+
+    def generate_jobs(self, delta_time):
+        '''output jobs that are not scheduled and already passed the delta time'''
+        def _gen(df, delta):
+            # not yet generated + passed the time offset
+            logging.info("delta-time: %d" % delta)
+            cond = (df["generated"] == 0) & (df["normalized_time"] <= delta)
+            return df[cond]
+        to_be_generated = _gen(self.trace_df, delta_time)
+        self.trace_df.loc[to_be_generated.index, "generated"] = 1
+        return to_be_generated
