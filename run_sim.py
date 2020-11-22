@@ -73,9 +73,9 @@ flags.DEFINE_integer('gpu_memory_capacity', 32,
 flags.DEFINE_integer('num_queue', 1, '''The number of queues within the job manager''')
 flags.DEFINE_integer('num_gpu_p_node', 8,
                 '''Part of cluster spec: the number of gpus on each node, default is 8''')
-flags.DEFINE_integer('num_cpu_p_node', 64,
+flags.DEFINE_integer('num_cpu_p_node', 128,
                 '''Part of cluster spec: the number of cpus on each node, default is 64''')
-flags.DEFINE_integer('mem_p_node', 256,
+flags.DEFINE_integer('mem_p_node', 512,
                 '''Part of cluster spec: memory capacity on each node, default is 128''')
 flags.DEFINE_string('cluster_spec', None,
                 '''Part of cluster spec: cluster infra spec file,
@@ -1730,7 +1730,7 @@ def main(log_manager):
     exit()
 
 if __name__ == '__main__':
-    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)  # pylint: disable=line-too-long
+    logging.basicConfig(format='%(asctime)s p%(process)s {%(module)s:%(lineno)d} %(levelname)s: %(message)s', level=logging.DEBUG)  # pylint: disable=line-too-long
     execution_id = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')
     output_dir = os.path.join('log', FLAGS.log_path)
     output_dir = os.path.join(output_dir, execution_id)

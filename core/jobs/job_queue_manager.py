@@ -87,6 +87,8 @@ class JobQueueManager(object):
         else:
             self._add(0, new_job)
 
+    def get_next_job(self, queue_idx=0, job_in_queue=0):
+        return self.queues[queue_idx][job_in_queue]
 
     def pop(self, queue_idx=0, job_in_queue=0):
         return self.queues[queue_idx].pop(job_in_queue)

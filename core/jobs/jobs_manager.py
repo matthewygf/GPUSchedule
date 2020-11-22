@@ -7,7 +7,6 @@ import logging
 class JobsManager(object):
     """
     This acts like the Application/Framework master
-    NOTE: Assume jobs use all reduce instead of ps / workers.
     """
     def __init__(self, flags, job_queue_manager):
         self.job_queue_manager = job_queue_manager
@@ -27,11 +26,19 @@ class JobsManager(object):
         for i, q in enumerate(self.job_queue_manager.queues):
             self.job_queue_manager.queues[i] = sorted(q, key=lambda x: int(x.submit_time))
 
+    def get_next_job(self, delta, queue_idx=0, job_in_queue=0):
+        j = self.job_queue_manager.get_next_job(queue_idx, job_in_queue)
+        if j.submit_time <= delta:
+            return j
+        logging.info("job %s should not be scheduled yet... submitted time %.2f, current time %.2f" % (j.job_id, delta, j.submit_time))
+        return None
+
     def pop(self, delta, queue_idx=0, job_in_queue=0):
         j = self.job_queue_manager.pop(queue_idx, job_in_queue)
-        # if j.submit_time >= delta:
-        #     return j
-        return j
+        if j.submit_time <= delta:
+            return j
+        self.job_queue_manager.insert(queue_idx, job_in_queue)
+        return None
     
     def get_insert_position(self, jobs):
         ''' based on flags, identify the jobs position to insert'''
@@ -41,6 +48,7 @@ class JobsManager(object):
             for _ in jobs:
                 insert_pos.append(idx)
                 idx += 1
+            return insert_pos
         else:
             raise NotImplementedError()
     
@@ -51,6 +59,7 @@ class JobsManager(object):
         if self.flags.schedule == "fifo":
             for _ in jobs:
                 queue_pos.append(idx)
+            return queue_pos
         else:
             raise NotImplementedError()
 
@@ -60,8 +69,8 @@ class JobsManager(object):
         for job, q_index, j_index in zip(jobs, queue_insert_position, jobs_insert_position):
             self.job_queue_manager.insert(job, q_index, j_index)
 
-    def start_job(self, node, job_id):
-        executed_job, started_task_count = node.execute_job(job_id)
+    def start_job(self, node, job_id, delta_time):
+        executed_job, started_task_count = node.execute_job(job_id, delta_time)
         assert started_task_count > 0
 
         if started_task_count > 0:
@@ -84,10 +93,13 @@ class JobsManager(object):
         
         return True
 
-    def remaining_jobs(self, delta_time):
+    def remaining_jobs(self, delta_time=None):
         if self.replay_trace:
             return self.job_generator.remaining_jobs()
         raise NotImplementedError()
+
+    def queuing_jobs(self, delta_time=None):
+        return self.job_queue_manager.total_jobs(delta_time)
 
     def total_jobs(self, delta_time):
         ''''''
@@ -100,13 +112,19 @@ class JobsManager(object):
     def total_finished_jobs(self):
         return len(self.finished_jobs)
 
-    def gen_jobs(self, delta_time):
+    def gen_jobs(self, delta_time, scale_factor=1):
         samples = self.job_generator.generate_jobs(delta_time)
         # put into the queue or queues.
         logging.info("generated: %d" % len(samples))
         converted_jobs = []
-        for row in samples.iterrows():
-            j = Job(row.name)
+        for idx, row in samples.iterrows():
+            # replace faster
+            j = Job(idx, row.minutes * scale_factor, row.normalized_time, row.gpu_per_container,
+                    gpu_utilization_avg=row.gpu_utilization_avg, gpu_utilization_max=row.gpu_utilization_max,
+                    gpu_memory_max=util.convert_bytes(row.memory_max), 
+                    gpu_memory_avg=util.convert_bytes(row.memory_avg),
+                    total_gpus=row.used_gpus)
+            # logging.info(j.task_count)
             converted_jobs.append(j)
         self._insert(converted_jobs)
         return len(samples)
@@ -120,7 +138,7 @@ class JobsManager(object):
         for k, v, in iter(self.running_jobs.items()):
             duration = current_time - v.start_time
             # replay faster.
-            if duration < (v.duration / 5): continue
+            if duration < (v.duration): continue
             jobs_to_finish.append(v)
         return jobs_to_finish
 

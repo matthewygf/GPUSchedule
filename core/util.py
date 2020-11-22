@@ -18,6 +18,16 @@ def print_fn(log, level=0):
         logging.error(log)
         exit()
 
+def convert_bytes(num_byte, unit="GiB"):
+    if unit == "GiB":
+        return num_byte/1024/1024/1024
+    elif unit == "MiB":
+        return num_byte/1024/1024
+    elif unit == "KiB":
+        return num_byte/1024
+    else:
+        return num_byte
+        
 
 def make_dir_if_not_exist(local_path):
     if not os.path.exists(local_path):

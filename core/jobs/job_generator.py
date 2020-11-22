@@ -185,7 +185,10 @@ class JobTraceReader(object):
         self.trace_df.sort_values(by="normalized_time", inplace=True)
         self.trace_df.dropna(inplace=True)
         logging.info("dropped nan: %d" % len(self.trace_df))
-        self.trace_df["normalized_time"] /= self.trace_df["normalized_time"].min()
+        self.trace_df["normalized_time"] -= self.trace_df["normalized_time"].min()
+        self.trace_df["normalized_time"] /= 10000
+        # self.trace_df.to_csv("normalized_submit.csv",index=False)
+        
         logging.info("Finished Prepping...")
         self.trace_df["generated"] = 0
     

@@ -1,8 +1,8 @@
+import logging
 import math
 from core import util
 
 
-# TODO: GANDIVA, TOPOLOGY
 def ms_yarn_placement(infrastructure, next_job):
     gpu_demand = next_job.gpus
     try_alloc_ms = try_cross_node_alloc_ms if gpu_demand > infrastructure.num_gpu_p_node else try_single_node_alloc_ms
@@ -18,16 +18,17 @@ placement_algorithms = {
 def schedule_fifo(placement_algo, infrastructure, jobs_manager, delta):
     """NOTE: First in first out, does not preempt or migrate"""
     # F in F out, get the first job from the queue
-    next_job = jobs_manager.pop(delta)
+    next_job = jobs_manager.get_next_job(delta)
     if next_job is None:
-        return
+        util.print_fn("no job ready at time %d" % (delta))
+        return None, None, None
     assert next_job.is_waiting()
     nodes, success = placement_algo(infrastructure, next_job)
     if success:
+        _ = jobs_manager.pop(delta)
         return nodes, next_job, success
     else:
         next_job.pending_time += delta
-        jobs_manager.insert(next_job)
         return nodes, next_job, success
 
 
@@ -37,7 +38,7 @@ scheduling_algorithms = {
 }
 
 
-def try_cross_node_alloc_ms(infrastructure, job):
+def try_cross_node_alloc_ms(infrastructure, job, sort_fn=None, filter_fn=None):
     """
     From Tiresias:
     try get gpus from multiple nodes
@@ -52,26 +53,35 @@ def try_cross_node_alloc_ms(infrastructure, job):
     to_be_assigned = job.tasks.copy()
     num_full_tasks = len(job.tasks)
     assigned_task = {}
-    for n_id, node in iter(infrastructure.nodes.items()):
+    all_nodes = infrastructure.nodes.values()
+    
+    
+    if filter_fn:
+        all_nodes = filter_fn(all_nodes)
+
+    if sort_fn:
+        all_nodes = sort_fn(all_nodes)
+    
+    
+    for node in all_nodes:
         if not node.is_free(): continue
 
-        if len(assigned_task) == len(to_be_assigned): break
+        if len(assigned_task) == num_full_tasks: break
 
         # this is checking how many nodes can fit the job current remaining tasks.
-        ps_tasks_can_fit, worker_tasks_can_fit = node.can_fit_num_task(to_be_assigned)
+        worker_tasks_can_fit = node.can_fit_num_task(to_be_assigned)
+        if worker_tasks_can_fit == 0:
+            continue
 
-        ps_count = 0
         worker_count = 0
         pop_t = None
+        check_next = False
         for k, v in iter(job.tasks.items()):
             if k in assigned_task:
                 continue
 
-            if 'ps' in k and ps_count <= ps_tasks_can_fit:
-                pop_t = to_be_assigned[k]
-                ps_count += 1
-            elif 'worker' in k and worker_count <= worker_tasks_can_fit:
-                pop_t = to_be_assigned[k]
+            if 'worker' in k and worker_count <= worker_tasks_can_fit:
+                pop_t = to_be_assigned.pop(k, None)
                 worker_count += 1
             else:
                 continue
@@ -80,19 +90,29 @@ def try_cross_node_alloc_ms(infrastructure, job):
                 result = node.try_reserve_and_placed_task(pop_t)
                 if not result:
                     # we didn't actually placed anything if it was false.
-                    continue
+                    # put it back.
+                    to_be_assigned[k] = pop_t
+                    worker_count -= 1
+                    logging.info("unable to reserve job %s task %s on node %s, check next node..." % (job.job_id, k, node.node_id))
+                    check_next = True
+                    break
                 # from a job perspective keep track of where my tasks are
                 job.tasks_running_on[k] = node.node_id
+                logging.info("Job %s - task %s placed on %s" % (job.job_id, k, node.node_id))
                 assigned_task[k] = v
 
         # at least we have some task in the node.
-        if ps_count > 0 or worker_count > 0:
+        if  worker_count > 0:
             node.try_reserve_and_placed_job(job, False)
             nodes_assigned[node.node_id] = node
+            logging.info("Job %s require %d - placed on nodes %s" % (job.job_id, 
+                least_num_full_nodes, str(nodes_assigned.keys())))
 
-        if len(nodes_assigned) >= least_num_full_nodes and num_full_tasks == assigned_task:
-            util.print_fn("assigned number of nodes %d" %
-                          (len(nodes_assigned)))
+        if check_next:
+            continue
+
+        if len(nodes_assigned) >= least_num_full_nodes and num_full_tasks == len(assigned_task):
+            #util.print_fn("assigned number of nodes %d" %   (len(nodes_assigned)))
             break
 
     # if not enough, clear everything.
@@ -105,10 +125,11 @@ def try_cross_node_alloc_ms(infrastructure, job):
                 if pop_t is not None:
                     node.release_allocated_resources(pop_t)
         nodes_assigned.clear()
+        logging.info("not enough ")
         return {}, False
 
     if len(nodes_assigned) >= least_num_full_nodes and len(assigned_task) == num_full_tasks:
-        util.print_fn("placed job %s, on node %s" % (job.job_id, str(nodes_assigned.keys())))
+        util.print_fn("placed job %s with task %d, on node - %s" % (job.job_id, job.worker_count, str(nodes_assigned.keys())))
         return nodes_assigned, True
 
     raise ArithmeticError()

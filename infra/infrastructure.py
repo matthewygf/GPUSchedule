@@ -81,7 +81,7 @@ class Infrastructure(object):
         f_handler = open(spec_file, 'r')
         reader = csv.DictReader(f_handler, delimiter=',')
         keys = reader.fieldnames
-        util.print_fn(keys)
+        # util.print_fn(keys)
 
         for default_k in keys_default:
             if default_k not in keys: return

@@ -22,7 +22,7 @@ def main():
         '--scheme', scheme,
         '--trace_file', os.path.join("data",trace_file+'.csv'),
         '--schedule', schedule,
-        '--enable_network_costs', 'True',
+        '--enable_network_costs', 'False',
         '--log_path', log_path
     ]
     p = Popen(cmd)

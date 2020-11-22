@@ -39,8 +39,8 @@ class Task(object):
         self.finished = False
         self.migration_count = 0
 
-    def execute(self):
-        self.start_time = time.time()
+    def execute(self, delta_time):
+        self.start_time = delta_time
         self.migration_count += 1
         self.started = True
         self.running = True
@@ -76,13 +76,14 @@ class Job(object):
         self.finished = False
         self.failed_schedule = 0
         self.start_time = 0
-        self.duration = int(duration)
+        self.duration = duration
         self.submit_time = int(submit_time)
         self.pending_time = 0.0
         self.migration_count = 0
         self.worker_count = total_gpus // gpu_p_worker 
+        self.gpu_per_worker = gpu_p_worker
         self.gpus = total_gpus
-        self.task_count = self.worker_count
+        self.task_count = int(self.worker_count)
         self.task_id = ['worker' + str(task) for task in range(0, self.task_count) ]
         self.gpu_mem_avg = gpu_memory_avg
         self.gpu_mem_max = gpu_memory_max
@@ -104,7 +105,10 @@ class Job(object):
         result = {}
         for taskidx in self.task_id:
             t = Task(self.job_id, self.job_id+"_"+taskidx,
-                     self.duration)
+                     self.duration, gpu_utilization_avg=self.gpu_utilization_avg,
+                     gpu_utilization_max=self.gpu_utilization_max, gpu_mem_avg=self.gpu_mem_avg,
+                     gpu_mem_max=self.gpu_mem_max, cpu=self.cpus_per_task, mem=self.memory_per_task,
+                     gpu=self.gpu_per_worker)
             result[t.task_id] = t 
         return result
 
@@ -131,7 +135,7 @@ class Job(object):
             return True
         return False
 
-    def try_execute(self):
+    def try_execute(self, delta_time):
         """
         only execute when all tasks are executing
         """
@@ -141,7 +145,7 @@ class Job(object):
                 executed_tasks_count += 1
 
         if executed_tasks_count == self.task_count:
-            self.start_time = time.time()
+            self.start_time = delta_time
             self.migration_count += 1
             self.started = True
             self.running = True

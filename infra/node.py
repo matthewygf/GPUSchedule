@@ -1,4 +1,6 @@
 import copy
+import logging
+from subprocess import run
 from core import util
 import time
 from model import model_factory
@@ -6,7 +8,7 @@ import numpy as np
 
 
 class Node(object):
-    def __init__(self, rack_id, node_id, gpu_memory_capacity=0, cpus=0, gpus=0, memory=0):
+    def __init__(self, rack_id, node_id, gpu_memory_capacity=0, cpus=0, gpus=0, memory=0, enable_pack=False):
         self.node_id = str(node_id)
         self.cpu_count = cpus
         self.gpu_count = gpus
@@ -17,6 +19,7 @@ class Node(object):
         self.cpu_used = 0
         self.gpu_used = 0
         self.mem_used = 0
+        self.enable_pack = enable_pack
         self.gpu_mem_utilizations = {}
 
         # NOTE: all tasks are deep copied so can be safely deleted upon finished
@@ -68,10 +71,7 @@ class Node(object):
         """NOTE: release"""
         # clear tasks
         self.cpu_used -= task.cpu
-        if not task.is_ps:
-            assert task.gpu == 1
-            self.gpu_used -= task.gpu
-            assert self.gpu_used < 4, task.task_id
+        self.gpu_used -= task.gpu
         assert self.gpu_used >= 0
         self.mem_used -= task.mem
         if task.task_id in self.gpu_mem_utilizations:
@@ -83,33 +83,41 @@ class Node(object):
         NOTE: CRITICAL STUFF
         return integer, -1 if can fit all tasks.
         """
-        worker_count = sum([1 for t in tasks.values() if not t.is_ps])
+        
         first_task = next(iter(tasks.values()))
         cpu_per_task = first_task.cpu
         mem_per_task = first_task.mem
 
-        gpus_offset = self.gpu_free() - worker_count
+        gpus_task_offset = (self.gpu_free() // first_task.gpu) - len(tasks)
         cpus_task_offset = (self.cpu_free() // cpu_per_task) - len(tasks)
         mems_task_offset = (self.mem_free() // mem_per_task) - len(tasks)
-        num_tasks_gpus_can_fit = worker_count if gpus_offset >= 0 else worker_count + gpus_offset
+        num_tasks_gpus_can_fit = len(tasks) if gpus_task_offset >= 0 else len(tasks) + gpus_task_offset
         num_tasks_cpus_can_fit = len(tasks) if cpus_task_offset >= 0 else len(tasks) + cpus_task_offset
         num_tasks_mems_can_fit = len(tasks) if mems_task_offset >= 0 else len(tasks) + mems_task_offset
-        num_ps_tasks_can_fit = min(num_tasks_cpus_can_fit, num_tasks_mems_can_fit) - num_tasks_gpus_can_fit
-        return num_ps_tasks_can_fit, num_tasks_gpus_can_fit
+        return min(min(num_tasks_cpus_can_fit, num_tasks_mems_can_fit), num_tasks_gpus_can_fit)
 
-    def execute_job(self, job_id):
+
+    def execute_job(self, job_id, delta_time):
         # check placed tasks in current node that is correspond to same job_id
         started_task_count = 0
         job_to_execute = self.placed_jobs.pop(job_id, None)
         if job_to_execute is None:
             raise ValueError()
 
+        # logging.info("Job: %s --- tasks running on: %s" % (job_id, job_to_execute.tasks_running_on))
+        running_nodes = set(job_to_execute.tasks_running_on.values())
+        #logging.info("running nodes: %s" % (running_nodes))
+        if self.node_id not in running_nodes:
+            raise ValueError()
+
         for k, v in iter(job_to_execute.tasks_running_on.items()):
+            #logging.info("%s - %s" % (k,v))
             if v == self.node_id:
                 jt = self.placed_tasks.pop(k)
-                jt.execute()
+                jt.execute(delta_time)
                 self.running_tasks[k] = jt
-        result, started_task_count = job_to_execute.try_execute()
+                #logging.info("executing task: %s" % k)
+        result, started_task_count = job_to_execute.try_execute(delta_time)
         if result:
             return job_to_execute, started_task_count
         return None, started_task_count
@@ -143,9 +151,7 @@ class Node(object):
         assert self.gpu_used + task.gpu <= self.gpu_count
         self.cpu_used += task.cpu
         self.mem_used += task.mem
-        if not task.is_ps:
-            assert task.gpu == 1
-            self.gpu_used += task.gpu
+        self.gpu_used += task.gpu
         self.placed_tasks[task.task_id] = task
         return result
 
@@ -176,9 +182,9 @@ class Node(object):
         NOTE: right now this assume all tasks can fit then we placed the tasks and corresponding job.
         """
         result = False
-        ps_tasks, worker_tasks = self.can_fit_num_task(job.tasks)
+        worker_tasks = self.can_fit_num_task(job.tasks)
 
-        if ps_tasks + worker_tasks >= job.task_count:
+        if worker_tasks >= job.task_count:
             copy_j = job.tasks.copy()
             placed = 0
             for t in iter(copy_j.values()):

@@ -1,4 +1,5 @@
 import logging
+from math import inf
 import time
 from core.scheduling import algorithm
 from core import flags
@@ -39,6 +40,7 @@ class Scheduler(object):
         if self.num_free_nodes() < 1:
             return
         jobs_all = self.jobs_manager.total_jobs(delta)
+        util.print_fn("ALL jobs: %d" % (jobs_all))
         scheduling_algo = algorithm.scheduling_algorithms[self.schedule]
         placement_algo = algorithm.placement_algorithms[self.placement]
         nodes, job, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager, delta)
@@ -49,7 +51,7 @@ class Scheduler(object):
                 job.add_network_costs(extras)
                 util.print_fn("Job %s : Original duration %f , New duration %f" %
                             (job.job_id, orginal_duration, job.duration))
-            self.add_to_running(nodes, job.job_id)
+            self.add_to_running(nodes, job.job_id, delta)
         else:
             assert (jobs_all == self.jobs_manager.total_jobs(delta))
 
@@ -60,6 +62,8 @@ class Scheduler(object):
 
     def release_finished_jobs(self, current_time):
         jobs_to_finish = self.jobs_manager.prepare_finish_tasks(current_time)
+        logging.info("jobs to finish: %s" % (jobs_to_finish))
+        # TODO: show jobs to finish, might have bugs.
         for jtf in jobs_to_finish:
             success = False
             for task_id, node_id in iter(jtf.tasks_running_on.items()):
@@ -69,6 +73,7 @@ class Scheduler(object):
                 self.infrastructure.nodes[node_id].release_allocated_resources(running_task)
                 success = jtf.try_finished()
                 if success:
+                    logging.info("job %s finish" % (jtf.job_id))
                     self.jobs_manager.running_jobs.pop(jtf.job_id)
                     if jtf.job_id not in self.jobs_manager.finished_jobs:
                         self.jobs_manager.finished_jobs[jtf.job_id] = jtf
@@ -76,9 +81,9 @@ class Scheduler(object):
                     self.jobs_manager.busy_nodes.remove(node_id)
             assert success
 
-    def add_to_running(self, nodes, job_id):
+    def add_to_running(self, nodes, job_id, delta_time):
         for k, v in iter(nodes.items()):
-            self.jobs_manager.start_job(v, job_id)
+            self.jobs_manager.start_job(v, job_id, delta_time)
             assert (k in self.jobs_manager.busy_nodes)
 
     def _clear_nodes(self):
@@ -94,6 +99,7 @@ class Scheduler(object):
         start_time = time.time()
         delta_time = 0
         current_remaining = self.jobs_manager.remaining_jobs(delta_time)
+        queuing_jobs = self.jobs_manager.queuing_jobs(delta_time)
         running_jobs = len(self.jobs_manager.running_jobs)
         steps = 0
         while current_remaining + running_jobs > 0:
@@ -102,24 +108,24 @@ class Scheduler(object):
             # 2. TODO: preempt running jobs 
             # 3. TODO: migrate running jobs
             # 4. TODO: stochastic job arrival process
-            generated_num = self.jobs_manager.gen_jobs(delta_time)
-            if generated_num > 0:
+            time.sleep(1)
+            generated_num = self.jobs_manager.gen_jobs(delta_time, scale_factor=0.5)
+            if self.jobs_manager.queuing_jobs(delta_time) > 0:
                 # TODO: this will likely to be changed
                 self._schedule(delta_time)
-            new_current_remaining = self.jobs_manager.remaining_jobs(delta_time)
-            logging.info("current remaining: %d" % new_current_remaining)
-            end_time = time.time()
-            # self.release_finished_jobs(end_time)
+            current_remaining = self.jobs_manager.remaining_jobs(delta_time)
+            queuing_jobs = self.jobs_manager.queuing_jobs(delta_time)
             delta_time += 1
-            current_remaining = new_current_remaining
+            time.sleep(1)
+            self.release_finished_jobs(delta_time)
             running_jobs = len(self.jobs_manager.running_jobs)
             # self.pending_time = self.jobs_manager.average_pending_time()
-            # steps += 1
-            # util.print_fn("Remaining jobs: %d, Running Jobs: %d Finished Jobs %d" %
-            #               (new_current_remaining, running_jobs, len(self.jobs_manager.finished_jobs)))
-            # util.print_fn(self.jobs_manager.running_jobs.keys())
+            steps += 1
+            util.print_fn("Remaining jobs: %d, Queuing Jobs: %d Running Jobs: %d Finished Jobs %d" %
+                           (current_remaining, queuing_jobs, running_jobs, len(self.jobs_manager.finished_jobs)))
+            util.print_fn("running keys: %s " % str(self.jobs_manager.running_jobs.keys()))
             # for k, v in iter(self.infrastructure.nodes.items()):
-            #     util.print_fn("Node %s is %s, GPU used %d, each node has tasks %s, gpu_utilizations %s" %
+                # util.print_fn("Node %s is %s, GPU used %d, each node has tasks %s, gpu_utilizations %s" %
             #                   (k,
             #                    'busy' if len(v.running_tasks) > 0 else 'free',
             #                    v.gpu_used,
