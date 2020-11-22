@@ -10,7 +10,7 @@ def main():
     num_nodes_p_switch = 32
     num_switch = 8
     schedule = 'fifo'
-    trace_file = 'cleaned_samples_month'
+    trace_file = 'month'
     log_sub_dir = "nodes_p_s"+str(num_nodes_p_switch) + "_job_" + trace_file
     log_path = os.path.join(log_sub_dir, f"{scheme}_{schedule}")
     python_ex = 'python.exe' if os.name == 'nt' else 'python3'
