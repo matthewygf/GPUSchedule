@@ -1,4 +1,13 @@
-class Task(object):
+class CompareAbleByUtilization(object):
+    
+    def __lt__(self, other):
+        '''max heap by utilization'''
+        if self.gpu_utilization_avg:
+            return self.gpu_utilization_avg > other.gpu_utilization_avg
+
+        return False
+
+class Task(CompareAbleByUtilization):
     """NOTE: 
     each job can have multiple tasks, 
     each task can be identified from job_id
@@ -36,8 +45,9 @@ class Task(object):
         self.migration_count += 1
         self.started = True
         self.running = True
-    
-class Job(object):
+
+
+class Job(CompareAbleByUtilization):
     """
     NOTE:
     Assumption:

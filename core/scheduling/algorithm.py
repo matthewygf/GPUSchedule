@@ -15,7 +15,7 @@ placement_algorithms = {
 }
 
 
-def schedule_fifo(placement_algo, infrastructure, jobs_manager, delta):
+def schedule_fifo(placement_algo, infrastructure, jobs_manager, delta, **kwargs):
     """NOTE: First in first out, does not preempt or migrate"""
     # F in F out, get the first job from the queue
     next_job = jobs_manager.get_next_job(delta)
@@ -31,9 +31,28 @@ def schedule_fifo(placement_algo, infrastructure, jobs_manager, delta):
         next_job.pending_time += delta
         return nodes, next_job, success
 
+def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **kwargs):
+    """NOTE: schedule based on utilization and queue size."""
+    #. 1. get min(k, queuing) jobs
+    look_ahead = []
+    min_k = min(k, jobs_manager.queuing_jobs(delta))
+    for _ in range(0, min_k):
+        j = jobs_manager.pop(delta)
+        assert j.is_waiting()
+        look_ahead.append(j)
+    
+    #. 2. for each job, score each node
+    job_node_score = {}
+    for j in look_ahead:
+        nodes_score = placement_algo(infrastructure, j)
+        job_node_score[j] = nodes_score
+        # TODO: job_node_score
+    
+
 
 scheduling_algorithms = {
     'fifo': schedule_fifo,
+    'horus': schedule_horus,
     # 'sf': schedule_smallest_first
 }
 

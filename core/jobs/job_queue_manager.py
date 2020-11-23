@@ -2,6 +2,7 @@ import os
 import csv
 from core import util
 from core.jobs import job
+from heapq import *
 
 class JobQueueManager(object):
     """
@@ -13,6 +14,7 @@ class JobQueueManager(object):
         self.num_queue = flags.num_queue
         self.queues = [list() for i in range(self.num_queue)]
         self.queue_limit = [9999 for i in range(self.num_queue)]
+        self.queues_is_pq = [False for i in range(self.num_queue)]
         #TODO: whats to do with the workers and gittins
         # mem info in GB
         # self.worker_mem = 5
@@ -75,7 +77,10 @@ class JobQueueManager(object):
 
     def _add(self, queue_idx, new_job):
         if self._can_add(queue_idx):
-            self.queues[queue_idx].append(new_job)
+            if self.queues_is_pq[queue_idx]:
+                heappush(self.queues[queue_idx], new_job)
+            else:
+                self.queues[queue_idx].append(new_job)
         else:
             raise ArithmeticError()
 
@@ -91,7 +96,13 @@ class JobQueueManager(object):
         return self.queues[queue_idx][job_in_queue]
 
     def pop(self, queue_idx=0, job_in_queue=0):
+        if self.queues_is_pq[queue_idx]:
+            return heappop(self.queues[queue_idx])
+
         return self.queues[queue_idx].pop(job_in_queue)
 
     def insert(self, job, queue_idx=0, job_in_queue=0):
+        if self.queues_is_pq[queue_idx]:
+            return heappush(self.queues[queue_idx], job)
+            
         return self.queues[queue_idx].insert(job_in_queue, job)
