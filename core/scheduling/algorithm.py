@@ -42,12 +42,26 @@ def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **k
         look_ahead.append(j)
     
     #. 2. for each job, score each node
-    job_node_score = {}
+    job_node_costs = {}
+    current_min_cost = None
     for j in look_ahead:
-        nodes_score = placement_algo(infrastructure, j)
-        job_node_score[j] = nodes_score
-        # TODO: job_node_score
+        sorted_nodes_score = placement_algo(infrastructure, j)
+        job_node_costs[j] = sorted_nodes_score
+        if current_min_cost is None:
+            current_min_cost = j
+        elif current_min_cost > sorted_nodes_score[0]:
+            current_min_cost = sorted_nodes_score[0]
+        else:
+            # skip
+            continue
     
+    #. 3. schedule the min_cost job
+    #  a. put the rest of the job back into the corresponding queue.
+    raise NotImplementedError()
+    
+
+
+
 
 
 scheduling_algorithms = {

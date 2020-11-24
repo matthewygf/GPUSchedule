@@ -47,7 +47,7 @@ class Infrastructure(object):
                 node = n.Node(rack.rack_id, str(nodes),
                               self.gpu_memory_capacity,
                               self.num_cpu_p_node, self.num_gpu_p_node,
-                              self.mem_p_node)
+                              self.mem_p_node, enable_pack=self.flags.pack)
                 self.nodes[str(nodes)] = node
                 rack.add_node(node)
             self.racks[str(rack_id)] = rack
