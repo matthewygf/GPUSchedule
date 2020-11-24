@@ -9,9 +9,14 @@ def ms_yarn_placement(infrastructure, next_job):
     nodes, success = try_alloc_ms(infrastructure, next_job)
     return nodes, success
 
+def horus_placement(infrastructure, next_job):
+    # horus produce a scores for each node given a job.
+    pass
+
 
 placement_algorithms = {
-    'yarn': ms_yarn_placement
+    'yarn': ms_yarn_placement,
+    'horus': horus_placement
 }
 
 
@@ -35,29 +40,38 @@ def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **k
     """NOTE: schedule based on utilization and queue size."""
     #. 1. get min(k, queuing) jobs
     look_ahead = []
-    min_k = min(k, jobs_manager.queuing_jobs(delta))
+    min_k = max(0, min(k, jobs_manager.queuing_jobs(delta)))
     for _ in range(0, min_k):
         j = jobs_manager.pop(delta)
         assert j.is_waiting()
         look_ahead.append(j)
     
+    current_len = len(look_ahead)
+    assert current_len == min_k
+
     #. 2. for each job, score each node
     job_node_costs = {}
     current_min_cost = None
-    for j in look_ahead:
+    look_ahead_pos = None
+    for idx, j in enumerate(look_ahead):
         sorted_nodes_score = placement_algo(infrastructure, j)
-        job_node_costs[j] = sorted_nodes_score
+        job_node_costs[j.job_id] = sorted_nodes_score
         if current_min_cost is None:
             current_min_cost = j
+            look_ahead_pos = idx
         elif current_min_cost > sorted_nodes_score[0]:
             current_min_cost = sorted_nodes_score[0]
+            look_ahead_pos = idx
         else:
             # skip
             continue
     
     #. 3. schedule the min_cost job
     #  a. put the rest of the job back into the corresponding queue.
-    raise NotImplementedError()
+    target_job = look_ahead.pop(look_ahead_pos)
+    assert len(look_ahead) == current_len - 1
+    jobs_manager.insert(look_ahead)
+    return job_node_costs[target_job.job_id], target_job, True
     
 
 

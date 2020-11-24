@@ -48,9 +48,15 @@ class JobsManager(object):
             for _ in jobs:
                 insert_pos.append(idx)
                 idx += 1
-            return insert_pos
+        elif self.flags.schedule == "horus":
+            # doesn't matter, let the queue do its priority heapsort
+            for _ in jobs:
+                insert_pos.append(idx)
+                idx += 1
         else:
             raise NotImplementedError()
+        return insert_pos
+
     
     def get_queue_position(self, jobs):
         ''' based on flags, identify the queues position to insert'''
@@ -59,11 +65,16 @@ class JobsManager(object):
         if self.flags.schedule == "fifo":
             for _ in jobs:
                 queue_pos.append(idx)
-            return queue_pos
+        elif self.flags.schedule == "horus":
+            #one queue also in horus normal ver.
+            for _ in jobs:
+                queue_pos.append(idx)
         else:
             raise NotImplementedError()
+        return queue_pos
 
-    def _insert(self, jobs):
+
+    def insert(self, jobs):
         jobs_insert_position = self.get_insert_position(jobs)
         queue_insert_position = self.get_queue_position(jobs)
         for job, q_index, j_index in zip(jobs, queue_insert_position, jobs_insert_position):
@@ -126,7 +137,7 @@ class JobsManager(object):
                     total_gpus=row.used_gpus)
             # logging.info(j.task_count)
             converted_jobs.append(j)
-        self._insert(converted_jobs)
+        self.insert(converted_jobs)
         return len(samples)
 
     def average_pending_time(self):
