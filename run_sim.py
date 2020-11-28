@@ -47,6 +47,7 @@ flags.DEFINE_string('schedule', 'fifo',
                     7.dlas, discretized las
                     8.dlas-gpu, dlas using gpu time
                     Default is fifo''')
+flags.DEFINE_boolean('pack', False, '''Enable packing for gpus job.''')
 flags.DEFINE_integer('num_switch', 1, '''Part of cluster spec: the number of switches in this cluster, default is 1''')
 
 flags.DEFINE_integer('num_node_p_switch', 32,

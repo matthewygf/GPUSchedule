@@ -109,7 +109,7 @@ class Scheduler(object):
             # 3. TODO: migrate running jobs
             # 4. TODO: stochastic job arrival process
             time.sleep(1)
-            generated_num = self.jobs_manager.gen_jobs(delta_time, scale_factor=0.5)
+            _ = self.jobs_manager.gen_jobs(delta_time, scale_factor=0.5)
             if self.jobs_manager.queuing_jobs(delta_time) > 0:
                 # TODO: this will likely to be changed
                 self._schedule(delta_time)

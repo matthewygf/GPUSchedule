@@ -1,11 +1,5 @@
-import copy
-import logging
-from subprocess import run
+from infra.device import Device
 from core import util
-import time
-from model import model_factory
-import numpy as np
-
 
 class Node(object):
     def __init__(self, rack_id, node_id, gpu_memory_capacity=0, cpus=0, gpus=0, memory=0, enable_pack=False):
@@ -20,7 +14,9 @@ class Node(object):
         self.gpu_used = 0
         self.mem_used = 0
         self.enable_pack = enable_pack
-        self.gpu_mem_utilizations = {}
+        self.device_cache = {}
+        for idx in range(0, self.gpu_count):
+            self.device_cache[idx] = Device(idx, self.node_id, self.gpu_memory_capacity, self.enable_pack)
 
         # NOTE: all tasks are deep copied so can be safely deleted upon finished
         # we just wanted to keep track of the running tasks, 
@@ -97,6 +93,13 @@ class Node(object):
         return min(min(num_tasks_cpus_can_fit, num_tasks_mems_can_fit), num_tasks_gpus_can_fit)
 
 
+    def can_fit(self, task):
+        cpu_offset = self.cpu_free() - task.cpu
+        mem_offset = self.mem_free() - task.mem
+        gpu_offset = self.gpu_free() - task.gpu
+        result = (cpu_offset >= 0) and (mem_offset >= 0) and (gpu_offset >= 0)
+        return result
+
     def execute_job(self, job_id, delta_time):
         # check placed tasks in current node that is correspond to same job_id
         started_task_count = 0
@@ -122,30 +125,8 @@ class Node(object):
             return job_to_execute, started_task_count
         return None, started_task_count
 
-    def estimate_gpu_utilization(self):
-        """
-        Each model has a particular utilization.
-        Only used for Gandiva and Our Scheduler
-        return:
-            a tuple, each entry represent a gpu utilization.
-        """
-        worker_count = 0
-        # TODO: WRONG BECAUSE WE NEED TO DO IT PER JOB ONCE , NOT ALL TASKS !
-        for i, (k, v) in enumerate(self.running_tasks.items()):
-            if v.is_ps: continue
-            self.gpu_mem_utilizations[k] = min(
-                model_factory.estimate_gpu_utilization(v.model_size, v.is_cnn, self.gpu_memory_capacity),
-                0.99)
-            worker_count += 1
-            assert worker_count <= self.gpu_count
-
     def try_reserve_and_placed_task(self, task):
-        result = False
-        time.sleep(1)
-        cpu_offset = self.cpu_free() - task.cpu
-        mem_offset = self.mem_free() - task.mem
-        gpu_offset = self.gpu_free() - task.gpu
-        result = (cpu_offset >= 0) and (mem_offset >= 0) and (gpu_offset >= 0)
+        result = self.can_fit(task)
         if not result:
             return result
         assert self.gpu_used + task.gpu <= self.gpu_count

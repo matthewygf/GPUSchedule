@@ -1,6 +1,8 @@
 import logging
 import math
 from core import util
+import numpy as np
+from core.scheduling.horus import horus_score
 
 
 def ms_yarn_placement(infrastructure, next_job):
@@ -10,8 +12,33 @@ def ms_yarn_placement(infrastructure, next_job):
     return nodes, success
 
 def horus_placement(infrastructure, next_job):
-    # horus produce a scores for each node given a job.
-    pass
+    ''' horus produce a scores for each node given a job.
+        according to gpu utilizations and gpu memory capacity. 
+        NOTE: 
+        no bandwidth consideration at the moment.
+        i.e. the following are not considered 
+        1. prefer 1 node to hold all tasks.
+        2. schedule the tasks as close as possible.
+        3. PCIe bandwidth
+    '''
+    gpu_demand = next_job.gpus
+    gpu_util_avg = next_job.gpu_utilization_avg
+    gpu_util_max = next_job.gpu_utilization_max
+    gpu_mem_max = next_job.gpu_memory_max
+    gpu_mem_avg = next_job.gpu_mem_avg
+
+    assigned = []
+    for t in next_job.tasks:
+        for node in infrastructure.get_free_nodes():
+            # this is checking how many nodes can fit the job current remaining tasks.
+            can_fit = node.can_fit(t)
+            if not can_fit:
+                continue
+            
+            # score the node as the sum of the gpu scores ?
+            device_scores, node_sum = horus_score(node, t)
+            # TODO
+        
 
 
 placement_algorithms = {
@@ -32,9 +59,8 @@ def schedule_fifo(placement_algo, infrastructure, jobs_manager, delta, **kwargs)
     if success:
         _ = jobs_manager.pop(delta)
         return nodes, next_job, success
-    else:
-        next_job.pending_time += delta
-        return nodes, next_job, success
+    next_job.pending_time += delta
+    return nodes, next_job, success
 
 def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **kwargs):
     """NOTE: schedule based on utilization and queue size."""
