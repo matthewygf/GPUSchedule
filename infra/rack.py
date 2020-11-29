@@ -1,4 +1,4 @@
-WIPfrom collections import OrderedDict
+from collections import OrderedDict
 from core import util
 
 class Rack(object):
