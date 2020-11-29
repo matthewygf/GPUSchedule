@@ -3,7 +3,21 @@ import math
 from core import util
 import numpy as np
 from core.scheduling.horus import horus_score
+from heapq import heappop, heappush
 
+
+class NodeDeviceInfo(object):
+    def __init__(self, node, device_scores, total_score, min_score):
+        """
+        a class to hold the relevant scoring information and allow the heap to compare
+        """
+        self.device_scores = device_scores
+        self.node = node
+        self.total_score = total_score
+        self.min_score = min_score
+
+    def __lt__(self, other):
+        return self.min_score > other.min_score
 
 def ms_yarn_placement(infrastructure, next_job):
     gpu_demand = next_job.gpus
@@ -22,13 +36,11 @@ def horus_placement(infrastructure, next_job):
         3. PCIe bandwidth
     '''
     gpu_demand = next_job.gpus
-    gpu_util_avg = next_job.gpu_utilization_avg
-    gpu_util_max = next_job.gpu_utilization_max
-    gpu_mem_max = next_job.gpu_memory_max
-    gpu_mem_avg = next_job.gpu_mem_avg
-
-    assigned = []
-    for t in next_job.tasks:
+    
+    # maintain a max heap with min size of nodes to hold the tasks.
+    nodes_stack = []
+    score_cache = OrderedDict()
+    for _, t in next_job.tasks.items():
         for node in infrastructure.get_free_nodes():
             # this is checking how many nodes can fit the job current remaining tasks.
             can_fit = node.can_fit(t)
@@ -36,9 +48,57 @@ def horus_placement(infrastructure, next_job):
                 continue
             
             # score the node as the sum of the gpu scores ?
-            device_scores, node_sum = horus_score(node, t)
-            # TODO
+            device_scores, node_sum, min_cost = horus_score(node, t)
+            node_device_info = NodeDeviceInfo(node, device_scores=device_scores, total_score=node_sum, min_score=min_cost)
+            heappush(nodes_stack, node_device_info)
+
+            # assuming each node has 1 device avaliable, then at most,
+            # we only need to maintain a heap of size =  each node with 1 gpu
+            if len(nodes_stack) > gpu_demand:
+                item = heappop(nodes_stack)
+                score_cache[node.node_id] = item
+                logging.info("removing: %s min_cost at: %d" % (str(item.node.node_id), item.min_score))
+    
+    # dp to find best distanced placement.
+    # if possible.
+    # if cross node add a cost, if cross rack add a bigger cost
+    logging.info("ranking nodes : %s" % [n.node.node_id for n in nodes_stack])
+
+    # now sort the stack into minimum first
+    nodes_stack = sorted(nodes_stack, key=lambda x: x.min_score)
+    best_assignment_for_node = []
+    for _ in range(len(nodes_stack)):
+        best_assignment_for_node.append([])
+
+
+    logging.info(best_assignment_for_node)
+
+    num_tasks = len(next_job.tasks)
+    for i, info in enumerate(nodes_stack):
         
+        # case 1: if one node can satisfy the job. do it
+        worker_tasks_can_fit = info.node.can_fit_num_task(next_job.tasks)
+        
+        if worker_tasks_can_fit == len(next_job.tasks):
+            # only one node needed.
+            best_assignment_for_node[i].append(info.node)
+            break
+        
+        # case 2: get some more node from the closest racks.
+        racks_to_consider = infrastructure.get_racks_by_dist(info.node.rack_id)
+        # starting from close rack if possible.
+        logging.info("---------------------")
+        for r_id, dist in racks_to_consider:
+            # infrastructure.racks[r_id]
+            # logging.info("rack %s - dist at %d" % (r_id, dist))
+
+            while worker_tasks_can_fit < num_tasks:
+                # TODO:
+                worker_tasks_can_fit += n.can_fit_num_task(next_job)
+                best_assignment_for_node[i].append(info.node)
+
+
+    raise NotImplementedError()
 
 
 placement_algorithms = {

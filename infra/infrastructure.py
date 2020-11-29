@@ -3,6 +3,7 @@ import csv
 from infra import node as n
 from infra import rack as r
 from core import util
+from collections import OrderedDict
 
 keys_default = [
     'num_switch',
@@ -23,8 +24,8 @@ class Infrastructure(object):
     """
     def __init__(self, flags):
         self.flags = flags
-        self.racks = {}
-        self.nodes = {}
+        self.racks = OrderedDict()
+        self.nodes = OrderedDict()
         self.num_switch = self.flags.num_switch
         self.bandwidth = self.flags.bandwidth
         self.internode_latency = self.flags.internode_latency
@@ -35,6 +36,7 @@ class Infrastructure(object):
         self.num_gpu_p_node = self.flags.num_gpu_p_node
         self.mem_p_node = self.flags.mem_p_node
         self.cluster_spec = self.flags.cluster_spec
+        self.racks_dist_map = {}
         self._setup_nodes()
     
     def _init_nodes(self):
@@ -126,3 +128,17 @@ class Infrastructure(object):
         for node in iter(self.nodes.values()):
             result += node.mem_free()
         return result
+
+    def get_racks_by_dist(self, other_rack_id):
+        racks_dist = self.racks_dist_map.get(other_rack_id, [])
+        if len(racks_dist) != 0:
+            return racks_dist
+
+        for _, rack in self.racks.items():
+            # assume rack are placed by id.
+            # one can change this into cluster id 
+            racks_dist.append((rack.rack_id, abs(int(rack.rack_id) - int(other_rack_id))))
+        
+        racks_dist = sorted(racks_dist, key=lambda x: x[1])
+        self.racks_dist_map[other_rack_id] = racks_dist
+        return racks_dist

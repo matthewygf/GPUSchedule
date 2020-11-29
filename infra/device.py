@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import numpy as np
 
 class Device(object):
@@ -8,7 +9,7 @@ class Device(object):
         self.memory = memory_cap
         self.memory_used = 0
         self.enable_pack = enable_pack
-        self.running_tasks = {}
+        self.running_tasks = OrderedDict()
 
     def add_task(self, task):
         result = False

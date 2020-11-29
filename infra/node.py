@@ -1,5 +1,6 @@
 from infra.device import Device
 from core import util
+from collections import OrderedDict
 
 class Node(object):
     def __init__(self, rack_id, node_id, gpu_memory_capacity=0, cpus=0, gpus=0, memory=0, enable_pack=False):
@@ -14,7 +15,7 @@ class Node(object):
         self.gpu_used = 0
         self.mem_used = 0
         self.enable_pack = enable_pack
-        self.device_cache = {}
+        self.device_cache = OrderedDict()
         for idx in range(0, self.gpu_count):
             self.device_cache[idx] = Device(idx, self.node_id, self.gpu_memory_capacity, self.enable_pack)
 
@@ -74,11 +75,13 @@ class Node(object):
             self.gpu_mem_utilizations.pop(task.task_id)
         self.finished_tasks.append(task.task_id)
 
-    def can_fit_num_task(self, tasks):
+    def can_fit_num_task(self, tasks, pack=False):
         """
         NOTE: CRITICAL STUFF
         return integer, -1 if can fit all tasks.
         """
+        if pack:
+            return self._can_fit_num_with_pack(tasks)
         
         first_task = next(iter(tasks.values()))
         cpu_per_task = first_task.cpu
@@ -92,6 +95,17 @@ class Node(object):
         num_tasks_mems_can_fit = len(tasks) if mems_task_offset >= 0 else len(tasks) + mems_task_offset
         return min(min(num_tasks_cpus_can_fit, num_tasks_mems_can_fit), num_tasks_gpus_can_fit)
 
+    def _can_fit_num_with_pack(self, tasks):
+        count = 0
+        for _, t in tasks.items():
+            if self.gpu_free() < t.gpu or self.cpu_free() < t.cpu or self.mem_free() < t.mem:
+                continue
+
+            for _, d in self.device_cache.items():
+                # safety margin 500 Mb ? 
+                if d.memory - (d.get_current_memory() + t.gpu_memory_max) > 500:
+                    count += 1
+        return count
 
     def can_fit(self, task):
         cpu_offset = self.cpu_free() - task.cpu

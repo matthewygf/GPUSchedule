@@ -32,8 +32,8 @@ class Task(CompareAbleByUtilization):
         self.start_time = 0
         self.gpu_utilization_avg = gpu_utilization_avg
         self.gpu_utilization_max = gpu_utilization_max
-        self.gpu_mem_avg=gpu_mem_avg
-        self.gpu_mem_max=gpu_mem_max
+        self.gpu_memory_avg=gpu_mem_avg
+        self.gpu_memory_max=gpu_mem_max
         self.duration = duration
         self.started = False
         self.running = False
