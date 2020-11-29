@@ -6,10 +6,10 @@ def main():
     # cluster_spec = 'n4g4'
     # trace_file = '60'
 
-    scheme = 'yarn'
+    scheme = 'horus'
     num_nodes_p_switch = 32
     num_switch = 8
-    schedule = 'fifo'
+    schedule = 'horus'
     trace_file = 'month'
     log_sub_dir = "nodes_p_s"+str(num_nodes_p_switch) + "_job_" + trace_file
     log_path = os.path.join(log_sub_dir, f"{scheme}_{schedule}")
