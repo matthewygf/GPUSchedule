@@ -2,6 +2,7 @@ import logging
 import math
 from core import util
 import numpy as np
+from collections import OrderedDict
 from core.scheduling.horus import horus_score
 from heapq import heappop, heappush
 
@@ -57,49 +58,68 @@ def horus_placement(infrastructure, next_job):
             if len(nodes_stack) > gpu_demand:
                 item = heappop(nodes_stack)
                 score_cache[node.node_id] = item
-                logging.info("removing: %s min_cost at: %d" % (str(item.node.node_id), item.min_score))
     
-    # dp to find best distanced placement.
-    # if possible.
-    # if cross node add a cost, if cross rack add a bigger cost
-    logging.info("ranking nodes : %s" % [n.node.node_id for n in nodes_stack])
-
     # now sort the stack into minimum first
     nodes_stack = sorted(nodes_stack, key=lambda x: x.min_score)
     best_assignment_for_node = []
     for _ in range(len(nodes_stack)):
-        best_assignment_for_node.append([])
-
-
-    logging.info(best_assignment_for_node)
+        # to store each node with its associate distributed training node
+        best_assignment_for_node.append((set(), {}))
 
     num_tasks = len(next_job.tasks)
+    at_least_one_succeeded = False
     for i, info in enumerate(nodes_stack):
+        for t_id, t in next_job.tasks.items():
+            ok = info.node.can_fit(t, pack=True)
+            if ok:
+                best_assignment_for_node[i][1][t_id] = info.node.node_id
+                best_assignment_for_node[i][0].add(info.node.node_id)
         
-        # case 1: if one node can satisfy the job. do it
-        worker_tasks_can_fit = info.node.can_fit_num_task(next_job.tasks)
+        if len(best_assignment_for_node[i][1]) >= num_tasks:
+            # start again for the next node,
+            # as we are iterating to see which combinations of nodes are the best
+            at_least_one_succeeded = True
+            continue
         
-        if worker_tasks_can_fit == len(next_job.tasks):
-            # only one node needed.
-            best_assignment_for_node[i].append(info.node)
-            break
-        
-        # case 2: get some more node from the closest racks.
+        # else if one node cannot take it.
+        # choose from closer racks
         racks_to_consider = infrastructure.get_racks_by_dist(info.node.rack_id)
-        # starting from close rack if possible.
-        logging.info("---------------------")
-        for r_id, dist in racks_to_consider:
-            # infrastructure.racks[r_id]
-            # logging.info("rack %s - dist at %d" % (r_id, dist))
+        for r_id, _ in racks_to_consider:
+            if len(best_assignment_for_node[i][1]) >= num_tasks:
+                at_least_one_succeeded = True
+                break
+            
+            the_rack = infrastructure.racks[r_id]
+            
+            for _, rack_n in the_rack.nodes.items():
+                if len(best_assignment_for_node[i][1]) >= num_tasks:
+                    break
 
-            while worker_tasks_can_fit < num_tasks:
-                # TODO:
-                worker_tasks_can_fit += n.can_fit_num_task(next_job)
-                best_assignment_for_node[i].append(info.node)
+                for t_id, t in next_job.tasks.items():
+                    if t_id in best_assignment_for_node[i][1]:
+                        continue
+                    ok = rack_n.can_fit(t, pack=True)
+                    if ok:
+                        best_assignment_for_node[i][1][t_id] = rack_n.node_id
+                        best_assignment_for_node[i][0].add(info.node.node_id)
 
-
-    raise NotImplementedError()
-
+                    if len(best_assignment_for_node[i][1]) >= num_tasks:
+                        break
+    
+    # no possible placements for the tasks.
+    if not at_least_one_succeeded:
+        return None, False
+    
+    # now we should have assignments ready for each node from the heap
+    # and its associated jobs assignment across nodes and racks
+    # sort by smallest amount of nodes needed 
+    # TODO: whether to by nodes or by dist of racks
+    logging.info(best_assignment_for_node)
+    # currently, the less nodes the better
+    best_assignment_for_node = sorted(best_assignment_for_node, key=lambda x: len(x[0]))
+    logging.info(best_assignment_for_node[0])
+    
+    return best_assignment_for_node[0][0], True
 
 placement_algorithms = {
     'yarn': ms_yarn_placement,
@@ -119,7 +139,7 @@ def schedule_fifo(placement_algo, infrastructure, jobs_manager, delta, **kwargs)
     if success:
         _ = jobs_manager.pop(delta)
         return nodes, next_job, success
-    next_job.pending_time += delta
+    
     return nodes, next_job, success
 
 def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **kwargs):
@@ -136,34 +156,28 @@ def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **k
     assert current_len == min_k
 
     #. 2. for each job, score each node
-    job_node_costs = {}
-    current_min_cost = None
     look_ahead_pos = None
+    nodes_to_schedule = None
     for idx, j in enumerate(look_ahead):
-        sorted_nodes_score = placement_algo(infrastructure, j)
-        job_node_costs[j.job_id] = sorted_nodes_score
-        if current_min_cost is None:
-            current_min_cost = j
+        nodes, success = placement_algo(infrastructure, j)
+        
+        if success:
             look_ahead_pos = idx
-        elif current_min_cost > sorted_nodes_score[0]:
-            current_min_cost = sorted_nodes_score[0]
-            look_ahead_pos = idx
-        else:
-            # skip
-            continue
-    
-    #. 3. schedule the min_cost job
-    #  a. put the rest of the job back into the corresponding queue.
+            nodes_to_schedule = nodes
+            break
+        
+    #. 3. schedule the first job that is successful
+    #  as it's already sorted by utilization
+    #  then put the rest of the jobs back into the corresponding queue.
+    if look_ahead_pos is None or nodes_to_schedule is None:
+        jobs_manager.insert(look_ahead)
+        return None, None, False
+        
     target_job = look_ahead.pop(look_ahead_pos)
     assert len(look_ahead) == current_len - 1
     jobs_manager.insert(look_ahead)
-    return job_node_costs[target_job.job_id], target_job, True
+    return nodes_to_schedule, target_job, True
     
-
-
-
-
-
 scheduling_algorithms = {
     'fifo': schedule_fifo,
     'horus': schedule_horus,
@@ -231,7 +245,7 @@ def try_cross_node_alloc_ms(infrastructure, job, sort_fn=None, filter_fn=None):
                     break
                 # from a job perspective keep track of where my tasks are
                 job.tasks_running_on[k] = node.node_id
-                logging.info("Job %s - task %s placed on %s" % (job.job_id, k, node.node_id))
+                # logging.info("Job %s - task %s placed on %s" % (job.job_id, k, node.node_id))
                 assigned_task[k] = v
 
         # at least we have some task in the node.
@@ -282,7 +296,7 @@ def try_single_node_alloc_ms(infrastructure, job):
         if allocated:
             return assigned_node, allocated
 
-        if ((node.gpu_free() >= job.gpus) and
+        if ((node.get_free_devices(False) >= job.gpus) and
                 (node.cpu_free() >= job.total_cpus_required()) and
                 (node.mem_free() >= job.total_mem_required())):
             if not node.try_alloc_job(job, True): continue

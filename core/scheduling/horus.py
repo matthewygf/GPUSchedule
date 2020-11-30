@@ -22,6 +22,7 @@ def horus_score(node, task):
         cost = (mem_cost * MEMCOST) + (util_cost / 100) + len(d.running_tasks)
         node_device_score[d.device_id] = cost
         node_sum_score += cost
+        # TODO: score cpu and memory too if needed
         if cost < min_cost:
             min_cost = cost
     return node_device_score, node_sum_score, min_cost

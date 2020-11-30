@@ -1,9 +1,14 @@
+import logging
 from infra.device import Device
 from core import util
 from collections import OrderedDict
+from infra.msg import resource_insuffcient_msg
 
 class Node(object):
-    def __init__(self, rack_id, node_id, gpu_memory_capacity=0, cpus=0, gpus=0, memory=0, enable_pack=False):
+    def __init__(self, rack_id, node_id, 
+                 gpu_memory_capacity=0, cpus=0, 
+                 gpus=0, memory=0, 
+                 enable_pack=False):
         self.node_id = str(node_id)
         self.cpu_count = cpus
         self.gpu_count = gpus
@@ -33,7 +38,6 @@ class Node(object):
 
     def check_util(self):
         result = (float(self.cpu_used) / float(self.cpu_count),
-                  float(self.gpu_used) / float(self.gpu_count),
                   float(self.mem_used) / float(self.mem_size))
 
         return result
@@ -47,33 +51,43 @@ class Node(object):
         result = (self.cpu_count - self.cpu_used)
         return result
 
-    def gpu_free(self):
-        result = (self.gpu_count - self.gpu_used)
-        return result
-
     def mem_free(self):
         result = (self.mem_size - self.mem_used)
         return result
 
     def is_free(self):
-        return self.gpu_free() > 0 or self.cpu_free() > 0 or self.mem_free() > 0
+        return self.cpu_free() > 0 or self.mem_free() > 0
 
     def reset_resource(self, num=0, gpu=1, cpu=4, mem=6):
         assert len(self.running_tasks) >= num
-        self.gpu_used = num * gpu
         self.cpu_used = num * cpu
         self.mem_used = num * mem
+        for d_id, d in self.device_cache:
+            d.reset()
+            self.device_cache[d_id] = d
+
 
     def release_allocated_resources(self, task):
         """NOTE: release"""
         # clear tasks
         self.cpu_used -= task.cpu
-        self.gpu_used -= task.gpu
-        assert self.gpu_used >= 0
         self.mem_used -= task.mem
-        if task.task_id in self.gpu_mem_utilizations:
-            self.gpu_mem_utilizations.pop(task.task_id)
+        for d_id, d in self.device_cache.items():
+            poped = d.running_tasks.pop(task.task_id, None)
+            self.device_cache[d_id] = d
+            if poped is not None:
+                logging.info("finishing task: %s at node %s device %s" %(task.task_id, self.node_id, d_id))
         self.finished_tasks.append(task.task_id)
+
+    def get_free_devices(self, pack):
+        if not pack:
+            cnt = 0
+            for _, d in self.device_cache.items():
+                if len(d.running_tasks) == 0:
+                    cnt += 1
+            return cnt
+
+        return len(self.device_cache)
 
     def can_fit_num_task(self, tasks, pack=False):
         """
@@ -86,8 +100,8 @@ class Node(object):
         first_task = next(iter(tasks.values()))
         cpu_per_task = first_task.cpu
         mem_per_task = first_task.mem
-
-        gpus_task_offset = (self.gpu_free() // first_task.gpu) - len(tasks)
+        num_free_devices = self.get_free_devices(pack)
+        gpus_task_offset = ( num_free_devices // first_task.gpu) - len(tasks)
         cpus_task_offset = (self.cpu_free() // cpu_per_task) - len(tasks)
         mems_task_offset = (self.mem_free() // mem_per_task) - len(tasks)
         num_tasks_gpus_can_fit = len(tasks) if gpus_task_offset >= 0 else len(tasks) + gpus_task_offset
@@ -98,7 +112,12 @@ class Node(object):
     def _can_fit_num_with_pack(self, tasks):
         count = 0
         for _, t in tasks.items():
-            if self.gpu_free() < t.gpu or self.cpu_free() < t.cpu or self.mem_free() < t.mem:
+            if self.cpu_free() < t.cpu:
+                logging.info(resource_insuffcient_msg, self.node_id, 'cpu', t.task_id, t.cpu, self.cpu_free())
+                continue
+                
+            if self.mem_free() < t.mem:
+                logging.info(resource_insuffcient_msg, self.node_id, 'mem', t.task_id, t.mem, self.mem_free())
                 continue
 
             for _, d in self.device_cache.items():
@@ -107,11 +126,26 @@ class Node(object):
                     count += 1
         return count
 
-    def can_fit(self, task):
+    def can_fit(self, task, pack=False):
         cpu_offset = self.cpu_free() - task.cpu
+        if cpu_offset < 0:
+            logging.info(resource_insuffcient_msg, self.node_id, 'cpu', task.task_id, task.cpu, self.cpu_free())
         mem_offset = self.mem_free() - task.mem
-        gpu_offset = self.gpu_free() - task.gpu
-        result = (cpu_offset >= 0) and (mem_offset >= 0) and (gpu_offset >= 0)
+        if mem_offset < 0:
+            logging.info(resource_insuffcient_msg, self.node_id, 'mem', task.task_id, task.mem, self.mem_free())
+
+        result = False
+        if not pack:
+            gpu_offset = self.get_free_devices(pack) - task.gpu
+            if gpu_offset < 0 :
+                logging.info(resource_insuffcient_msg, self.node_id, 'gpu', task.task_id, task.gpu, self.get_free_devices(pack))
+
+            result = (cpu_offset >= 0) and (mem_offset >= 0) and (gpu_offset >= 0)
+        else:
+            for _, d in self.device_cache.items():
+                if d.memory - (d.get_current_memory() + task.gpu_memory_max) > 500:
+                    result = True
+
         return result
 
     def execute_job(self, job_id, delta_time):
@@ -139,16 +173,28 @@ class Node(object):
             return job_to_execute, started_task_count
         return None, started_task_count
 
-    def try_reserve_and_placed_task(self, task):
-        result = self.can_fit(task)
+    def try_reserve_and_placed_task(self, task, pack=False):
+        result = self.can_fit(task, pack=pack)
         if not result:
             return result
-        assert self.gpu_used + task.gpu <= self.gpu_count
         self.cpu_used += task.cpu
         self.mem_used += task.mem
-        self.gpu_used += task.gpu
-        self.placed_tasks[task.task_id] = task
-        return result
+
+        should_be_placed = task.gpu
+        for d_id, d in self.device_cache.items():
+            if should_be_placed <= 0:
+                break
+            placed = d.add_task(task, pack=pack)
+            self.device_cache[d_id] = d
+            if placed:
+                logging.info("placing task %s at node %s - device %s", task.task_id, self.node_id, d_id)
+                should_be_placed -= 1
+            else:
+                logging.info("unable to place task %s at node %s - device %s", task.task_id, self.node_id, d_id)
+        
+        if should_be_placed == 0:
+            self.placed_tasks[task.task_id] = task
+        return should_be_placed == 0
 
     def try_reserve_and_placed_job(self, job, count_task_in_current_node=False):
         """

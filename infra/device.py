@@ -7,17 +7,22 @@ class Device(object):
         self.device_id = device_id
         self.node_id = node_id
         self.memory = memory_cap
-        self.memory_used = 0
         self.enable_pack = enable_pack
         self.running_tasks = OrderedDict()
 
-    def add_task(self, task):
+    def add_task(self, task, pack=False):
         result = False
         current_mem = self.get_current_memory()
-        if (current_mem + task.gpu_memory_avg) < self.memory + 50:
+        if (current_mem + task.gpu_memory_max) < self.memory + 50:
+            if not pack and len(self.running_tasks) > 0:
+                # not placing
+                return False
             self.running_tasks[task.task_id] = task
             result = True
         return result
+
+    def reset(self):
+        self.running_tasks = OrderedDict()
     
     def get_current_utilization(self):
         # go through each task and randomly sample from normal dist.

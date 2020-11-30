@@ -44,6 +44,7 @@ class Scheduler(object):
         scheduling_algo = algorithm.scheduling_algorithms[self.schedule]
         placement_algo = algorithm.placement_algorithms[self.placement]
         nodes, job, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager, delta)
+        self.jobs_manager.add_pending_time()
         if success:
             if self.infrastructure.enable_network_costs:
                 extras = network_service.calculate_network_costs(self.infrastructure, job)

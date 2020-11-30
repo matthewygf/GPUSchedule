@@ -30,7 +30,9 @@ class Infrastructure(object):
         self.bandwidth = self.flags.bandwidth
         self.internode_latency = self.flags.internode_latency
         self.enable_network_costs = self.flags.enable_network_costs
-        self.gpu_memory_capacity = self.flags.gpu_memory_capacity
+        # flags passed in GiB
+        # TODO: make a map instead
+        self.gpu_memory_capacity = self.flags.gpu_memory_capacity * 1024
         self.num_nodes_p_switch = self.flags.num_node_p_switch
         self.num_cpu_p_node = self.flags.num_cpu_p_node
         self.num_gpu_p_node = self.flags.num_gpu_p_node
