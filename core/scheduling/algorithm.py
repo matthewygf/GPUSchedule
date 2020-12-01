@@ -41,10 +41,11 @@ def horus_placement(infrastructure, next_job):
     # maintain a max heap with min size of nodes to hold the tasks.
     nodes_stack = []
     score_cache = OrderedDict()
+
     for _, t in next_job.tasks.items():
         for node in infrastructure.get_free_nodes():
             # this is checking how many nodes can fit the job current remaining tasks.
-            can_fit = node.can_fit(t)
+            can_fit = node.can_fit(t, pack=True)
             if not can_fit:
                 continue
             
@@ -64,22 +65,24 @@ def horus_placement(infrastructure, next_job):
     best_assignment_for_node = []
     for _ in range(len(nodes_stack)):
         # to store each node with its associate distributed training node
-        best_assignment_for_node.append((set(), {}))
+        best_assignment_for_node.append((set(), {}, False))
 
     num_tasks = len(next_job.tasks)
     at_least_one_succeeded = False
     for i, info in enumerate(nodes_stack):
+
         for t_id, t in next_job.tasks.items():
-            ok = info.node.can_fit(t, pack=True)
+            ok = infrastructure.nodes[info.node.node_id].try_reserve_and_placed_task(t, pack=True)
             if ok:
-                best_assignment_for_node[i][1][t_id] = info.node.node_id
-                best_assignment_for_node[i][0].add(info.node.node_id)
-        
-        if len(best_assignment_for_node[i][1]) >= num_tasks:
-            # start again for the next node,
-            # as we are iterating to see which combinations of nodes are the best
-            at_least_one_succeeded = True
-            continue
+                assert infrastructure.nodes[info.node.node_id].try_reserve_and_placed_job(next_job, False) == True
+                current_set_of_nodes = best_assignment_for_node[i][0]
+                current_set_of_nodes.add(info.node.node_id)
+
+                current_set_of_task_nodes_mapping = best_assignment_for_node[i][1]
+                if t_id in current_set_of_task_nodes_mapping:
+                    raise ValueError()
+                current_set_of_task_nodes_mapping[t_id] = info.node.node_id
+                best_assignment_for_node[i] = (current_set_of_nodes, current_set_of_task_nodes_mapping, best_assignment_for_node[i][2])
         
         # else if one node cannot take it.
         # choose from closer racks
@@ -98,14 +101,46 @@ def horus_placement(infrastructure, next_job):
                 for t_id, t in next_job.tasks.items():
                     if t_id in best_assignment_for_node[i][1]:
                         continue
-                    ok = rack_n.can_fit(t, pack=True)
+                    ok = infrastructure.nodes[rack_n.node_id].try_reserve_and_placed_task(t, pack=True)
                     if ok:
-                        best_assignment_for_node[i][1][t_id] = rack_n.node_id
-                        best_assignment_for_node[i][0].add(info.node.node_id)
+                        assert infrastructure.nodes[rack_n.node_id].try_reserve_and_placed_job(next_job, False) == True
+
+                        current_set_of_nodes = best_assignment_for_node[i][0]
+                        current_set_of_nodes.add(rack_n.node_id)
+
+                        current_set_of_task_nodes_mapping = best_assignment_for_node[i][1]
+                        if t_id in current_set_of_task_nodes_mapping:
+                            raise ValueError()
+                        current_set_of_task_nodes_mapping[t_id] = rack_n.node_id
+                        best_assignment_for_node[i] = (current_set_of_nodes, current_set_of_task_nodes_mapping, best_assignment_for_node[i][2])
 
                     if len(best_assignment_for_node[i][1]) >= num_tasks:
                         break
     
+        # clear previously reserved for backtracking
+        poped_job = {}
+        for task_id , assigned_node in best_assignment_for_node[i][1].items():
+            if not next_job.job_id in poped_job:
+                infrastructure.nodes[assigned_node].placed_jobs.pop(next_job.job_id)
+                poped_job[next_job.job_id] = 1
+            else:
+                poped_job[next_job.job_id] += 1
+            
+            pop_t = infrastructure.nodes[assigned_node].placed_tasks.pop(task_id, None)
+            if pop_t is not None:
+                infrastructure.nodes[assigned_node].release_allocated_resources(pop_t, reserved=True)
+        
+        assert poped_job[next_job.job_id] == len(next_job.tasks)
+
+
+        if len(best_assignment_for_node[i][1]) >= num_tasks:
+            # if task,node map satisfied the number of task, we should be okay.
+            # start again for the next node,
+            # as we are iterating to see which combinations of nodes are the best
+            at_least_one_succeeded = True
+            best_assignment_for_node[i] = (best_assignment_for_node[i][0], best_assignment_for_node[i][1], True)
+            continue
+
     # no possible placements for the tasks.
     if not at_least_one_succeeded:
         return None, False
@@ -114,12 +149,32 @@ def horus_placement(infrastructure, next_job):
     # and its associated jobs assignment across nodes and racks
     # sort by smallest amount of nodes needed 
     # TODO: whether to by nodes or by dist of racks
-    logging.info(best_assignment_for_node)
     # currently, the less nodes the better
+    # only succeeded nodes
+    best_assignment_for_node = [ x for x in best_assignment_for_node if x[2] ]
+    logging.info("succeeded placements plans: %s", best_assignment_for_node)
+    if len(best_assignment_for_node) == 0:
+        return None, False
+
     best_assignment_for_node = sorted(best_assignment_for_node, key=lambda x: len(x[0]))
-    logging.info(best_assignment_for_node[0])
+    task_node_map = best_assignment_for_node[0][1]
+    cnt = 0
+    results = {}
+    for task_id, node_id in task_node_map.items():
+        t = next_job.tasks[task_id]
+        success = infrastructure.nodes[node_id].try_reserve_and_placed_task(t, pack=True)
+        if success:
+            logging.info("placed task %s at node %s", task_id, node_id)
+            results[node_id] = infrastructure.nodes[node_id]
+            # from a job perspective keep track of where my tasks are
+            next_job.tasks_running_on[task_id] = infrastructure.nodes[node_id].node_id
+            infrastructure.nodes[node_id].try_reserve_and_placed_job(next_job, False)
+            cnt += 1
+
+    assert cnt == len(next_job.tasks), ('has %d expected %d - assigned map %s ' % 
+        (cnt, len(next_job.tasks), task_node_map))
     
-    return best_assignment_for_node[0][0], True
+    return results, True
 
 placement_algorithms = {
     'yarn': ms_yarn_placement,
@@ -201,14 +256,12 @@ def try_cross_node_alloc_ms(infrastructure, job, sort_fn=None, filter_fn=None):
     num_full_tasks = len(job.tasks)
     assigned_task = {}
     all_nodes = infrastructure.nodes.values()
-    
-    
+     
     if filter_fn:
         all_nodes = filter_fn(all_nodes)
 
     if sort_fn:
         all_nodes = sort_fn(all_nodes)
-    
     
     for node in all_nodes:
         if not node.is_free(): continue
@@ -270,7 +323,7 @@ def try_cross_node_alloc_ms(infrastructure, job, sort_fn=None, filter_fn=None):
             for t in iter(job.tasks.values()):
                 pop_t = node.placed_tasks.pop(t.task_id, None)
                 if pop_t is not None:
-                    node.release_allocated_resources(pop_t)
+                    node.release_allocated_resources(pop_t, reserved=True)
         nodes_assigned.clear()
         logging.info("not enough ")
         return {}, False

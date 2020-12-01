@@ -10,10 +10,12 @@ class Device(object):
         self.enable_pack = enable_pack
         self.running_tasks = OrderedDict()
 
+    def is_idle(self):
+        return len(self.running_tasks) == 0
+
     def add_task(self, task, pack=False):
         result = False
-        current_mem = self.get_current_memory()
-        if (current_mem + task.gpu_memory_max) < self.memory + 50:
+        if self.can_fit(task):
             if not pack and len(self.running_tasks) > 0:
                 # not placing
                 return False
@@ -36,7 +38,7 @@ class Device(object):
         # go through each task and randomly sample from normal dist.
         mem = 0
         for _, t in self.running_tasks.items():
-            mem += min(self.memory, np.random.normal(loc=t.gpu_memory_avg, scale=(t.gpu_memory_max - t.gpu_memory_avg)/2, size=1))
+            mem += min(self.memory, t.gpu_memory_max)
             mem = min(self.memory, mem)
         return mem
 
@@ -45,6 +47,12 @@ class Device(object):
     
     def can_fit(self, task):
         # theoretically, as long as we don't exceed the memory we should be good to go
-        if self.get_current_memory() + task.gpu_memory_avg < self.memory + 50:
+        current_mem = self.get_current_memory()
+
+        # one can think of this as the PCIe bandwidth setting.
+        if len(self.running_tasks) >= 3:
+            return False
+
+        if self.memory - (current_mem + task.gpu_memory_max) > 500:
             return True
         return False

@@ -68,8 +68,8 @@ flags.DEFINE_float('internode_latency', 0.015,
                      ''')
 flags.DEFINE_integer('gpu_memory_capacity', 32,
                      '''
-                     Specify GPU memory capacity to calculate the average utilization,
-                     will be used in packing scheme.
+                     Specify GPU memory capacity for the gpu,
+                     will be used in packing scheme .
                      ''')
 flags.DEFINE_integer('num_queue', 1, '''The number of queues within the job manager''')
 flags.DEFINE_integer('num_gpu_p_node', 8,
@@ -1723,7 +1723,7 @@ def main(log_manager):
     jq_manager = jq.JobQueueManager(FLAGS, trace_path)
 
     jobs_manager = am.JobsManager(FLAGS, jq_manager)
-    scheduler = sche.Scheduler(infrastructure, jobs_manager)
+    scheduler = sche.Scheduler(infrastructure, jobs_manager, log_manager)
 
     # NOTE: start simulation
     scheduler.start()

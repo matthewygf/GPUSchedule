@@ -1,3 +1,4 @@
+from log_manager import LogInfo
 import logging
 from math import inf
 import time
@@ -8,21 +9,21 @@ from core.network import network_service
 
 FLAGS = flags.FLAGS
 
-
 class Scheduler(object):
     """
     Scheduler object to manage jobs and schedule placements
     """
 
-    def __init__(self, infrastructure, jobs_manager):
+    def __init__(self, infrastructure, jobs_manager, log_manager, enable_migration=False):
         self.infrastructure = infrastructure
         # jobs manager maintains running jobs / finished jobs
         # NOTE: the queues are in jobs_manager
         self.jobs_manager = jobs_manager
+        self.log_manager = log_manager
         self.placement = infrastructure.flags.scheme
         self.schedule = infrastructure.flags.schedule
-        self.pending_time = 0.0
         # TODO: RL agent
+        self.enable_migration = enable_migration
         self.agent = None
 
     def add_rack(self, rack):
@@ -55,6 +56,70 @@ class Scheduler(object):
             self.add_to_running(nodes, job.job_id, delta)
         else:
             assert (jobs_all == self.jobs_manager.total_jobs(delta))
+
+    def _scan_for_migrate(self):
+        # if there is idle device
+        # if there is overloaded device
+        # we can identify whether idle devices satisfy the overloaded device's job.
+        # if it does, we preempt that job, and put it back to the job queue
+        idle_devices = []
+        most_overload_device = None
+        most_overload_count = 0
+        for n in self.infrastructure.nodes.values():
+            if n.is_idle():
+                for d in n.device_cache.values():
+                    if d.is_idle():
+                        idle_devices.append((n.node_id, d.device_id))
+                    else:
+                        load = len(d.running_task)
+                        if load > most_overload_count:
+                            most_overload_device = d
+    
+        if len(idle_devices) == 0:
+            return
+        # TODO: Migrate
+        return 
+
+    
+    def _construct_info(self):
+        idle_nodes = 0
+        busy_nodes = 0
+        idle_gpus = 0
+        busy_gpus = 0
+        avg_gpu_utilization = 0
+        avg_gpu_memory_allocated = 0
+        sum_gpu_memory_cap = 0
+        for n in self.infrastructure.nodes.values():
+            if n.is_idle():
+                idle_nodes += 1
+            else:
+                busy_nodes += 1
+
+            for d in n.device_cache.values():
+                if d.is_idle():
+                    idle_gpus += 1
+                    avg_gpu_utilization += 0
+                    avg_gpu_memory_allocated += 0
+                else:
+                    busy_gpus += 1
+                    avg_gpu_utilization += d.get_current_utilization()
+                    avg_gpu_memory_allocated += d.get_current_memory()
+                sum_gpu_memory_cap += d.memory
+        
+        avg_gpu_utilization /= (idle_gpus + busy_gpus)
+        avg_gpu_memory_allocated /= sum_gpu_memory_cap
+
+        queuing_jobs = self.jobs_manager.queuing_jobs()
+        running_jobs = len(self.jobs_manager.running_jobs)
+        finished_jobs = len(self.jobs_manager.finished_jobs)
+
+        # for all queuing jobs avg the pending time
+        avg_pending_time = self.jobs_manager.avg_pending_time()
+
+        return LogInfo(idle_nodes, busy_nodes, busy_gpus, idle_gpus,
+                     avg_gpu_utilization, avg_gpu_memory_allocated, avg_pending_time,
+                     running_jobs, queuing_jobs, finished_jobs)
+
 
     def unfinished_node_count(self):
         nodes = self.collate_all_nodes()
@@ -104,12 +169,8 @@ class Scheduler(object):
         running_jobs = len(self.jobs_manager.running_jobs)
         steps = 0
         while current_remaining + running_jobs > 0:
-            # NOTE: Make decision on whether to:
-            # 1. Done: schedule new jobs 
-            # 2. TODO: preempt running jobs 
-            # 3. TODO: migrate running jobs
-            # 4. TODO: stochastic job arrival process
             time.sleep(1)
+            # scale factor - scale the running minutes
             _ = self.jobs_manager.gen_jobs(delta_time, scale_factor=0.5)
             if self.jobs_manager.queuing_jobs(delta_time) > 0:
                 # TODO: this will likely to be changed
@@ -120,8 +181,11 @@ class Scheduler(object):
             time.sleep(1)
             self.release_finished_jobs(delta_time)
             running_jobs = len(self.jobs_manager.running_jobs)
-            # self.pending_time = self.jobs_manager.average_pending_time()
+            if self.enable_migration:
+                self._scan_for_migrate()
             steps += 1
+            loginfo = self._construct_info()
+            self.log_manager.step_cluster(loginfo, delta_time)
             util.print_fn("Remaining jobs: %d, Queuing Jobs: %d Running Jobs: %d Finished Jobs %d" %
                            (current_remaining, queuing_jobs, running_jobs, len(self.jobs_manager.finished_jobs)))
             util.print_fn("running keys: %s " % str(self.jobs_manager.running_jobs.keys()))

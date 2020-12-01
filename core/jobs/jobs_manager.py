@@ -58,11 +58,23 @@ class JobsManager(object):
         return insert_pos
 
     def add_pending_time(self):
-        num_queues = self.job_queue_manager.queues
+        num_queues = len(self.job_queue_manager.queues)
         for i in range(0, num_queues):
             num_jobs = len(self.job_queue_manager.queues[i])
             for j in range(0, num_jobs):
                 self.job_queue_manager.queues[i][j].pending_time += 1
+
+    def avg_pending_time(self):
+        num_queues = len(self.job_queue_manager.queues)
+        pending_time = 0
+        pending_cnt = 0
+        for i in range(0, num_queues):
+            num_jobs = len(self.job_queue_manager.queues[i])
+            for j in range(0, num_jobs):
+                pending_time += self.job_queue_manager.queues[i][j].pending_time
+            pending_cnt += num_jobs
+        
+        return pending_time / pending_cnt
 
     def get_queue_position(self, jobs):
         ''' based on flags, identify the queues position to insert'''
@@ -135,7 +147,6 @@ class JobsManager(object):
         logging.info("generated: %d" % len(samples))
         converted_jobs = []
         for idx, row in samples.iterrows():
-            # replace faster
             j = Job(idx, row.minutes * scale_factor, row.normalized_time, row.gpu_per_container,
                     gpu_utilization_avg=row.gpu_utilization_avg, gpu_utilization_max=row.gpu_utilization_max,
                     gpu_memory_max=util.convert_bytes(row.memory_max, unit="MiB"), 

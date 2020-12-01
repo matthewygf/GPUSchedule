@@ -1,6 +1,29 @@
 import csv
 import os
 
+class LogInfo(object):
+    def __init__(self, 
+                 num_idle_nodes,
+                 num_busy_nodes,
+                 num_busy_gpus,
+                 num_idle_gpus,
+                 avg_gpu_utilization,
+                 avg_gpu_memory_allocated,
+                 avg_pending_time,
+                 num_running_jobs,
+                 num_queuing_jobs,
+                 num_finish_jobs) -> None:
+        self.idle_ns = num_idle_nodes
+        self.busy_ns = num_busy_nodes
+        self.busy_gs = num_busy_gpus
+        self.idle_gs = num_idle_gpus
+        self.avg_g_utils = avg_gpu_utilization
+        self.avg_g_mem = avg_gpu_memory_allocated
+        self.avg_pending = avg_pending_time
+        self.num_running_jobs = num_running_jobs
+        self.num_queuing_jobs = num_queuing_jobs
+        self.num_finish_jobs = num_finish_jobs
+
 class LogManager(object):
     def __init__(self, log_path, flags):
         self.log_path = log_path
@@ -22,12 +45,13 @@ class LogManager(object):
         # init cluster log
         cluster_log = open(self.log_cluster, 'w+')
         writer = csv.writer(cluster_log)
-        if self.flags.scheme == 'gandiva':
-            writer.writerow(['time', 'idle_node', 'busy_node', 'full_node', 'fra_gpu', 'busy_gpu', 'pending_job', 'running_job', 'completed_job', 'len_g1', 'len_g2', 'len_g4', 'len_g8', 'len_g16', 'len_g32', 'len_g64'])
-        else:
-            writer.writerow(['time', 'idle_node', 'busy_node', 'full_node', 'idle_gpu', 'busy_gpu', 'pending_job', 'running_job', 'completed_job'])
+        writer.writerow([
+            'delta', 'num_idle_nodes', 'num_busy_nodes',
+            'num_busy_gpus', 'num_idle_gpus', 'avg_gpu_utilization',
+            'avg_gpu_memory_allocated', 'avg_pending_time',
+            'num_running_jobs', 'num_queuing_jobs',
+            'num_finish_jobs'])
         cluster_log.close()
-        del cluster_log
 
         # init cpu, gpu, mem, network logs
         if not self.is_count:
@@ -78,3 +102,20 @@ class LogManager(object):
         job_log.close()
 
         assert os.path.exists(self.log_cluster)
+    
+    def step_cluster(self, loginfo, delta):
+        with open(self.log_cluster, 'a+') as f:
+            writer = csv.writer(f)
+            writer.writerow({
+                'delta': delta,
+                'num_idle_nodes': loginfo.idle_ns,
+                'num_busy_nodes': loginfo.busy_ns,
+                'num_busy_gpus': loginfo.busy_gs,
+                'num_idle_gpus': loginfo.idle_gs,
+                'avg_gpu_utilization': loginfo.avg_g_utils,
+                'avg_gpu_memory_allocated': loginfo.avg_g_mem,
+                'avg_pending_time': loginfo.avg_pending,
+                'num_running_jobs': loginfo.num_running_jobs,
+                'num_queuing_jobs': loginfo.num_queuing_jobs,
+                'num_finish_jobs': loginfo.num_finish_jobs
+            })

@@ -67,7 +67,7 @@ class Node(object):
             self.device_cache[d_id] = d
 
 
-    def release_allocated_resources(self, task):
+    def release_allocated_resources(self, task, reserved=False):
         """NOTE: release"""
         # clear tasks
         self.cpu_used -= task.cpu
@@ -76,8 +76,16 @@ class Node(object):
             poped = d.running_tasks.pop(task.task_id, None)
             self.device_cache[d_id] = d
             if poped is not None:
-                logging.info("finishing task: %s at node %s device %s" %(task.task_id, self.node_id, d_id))
-        self.finished_tasks.append(task.task_id)
+                if not reserved:
+                    logging.info("finishing task: %s at node %s device %s" %(task.task_id, self.node_id, d_id))
+        if not reserved:
+            self.finished_tasks.append(task.task_id)
+
+    def is_idle(self):
+        count = len(self.running_tasks)
+        count += len(self.placed_tasks)
+        count += len(self.placed_jobs)
+        return count == 0
 
     def get_free_devices(self, pack):
         if not pack:
@@ -128,11 +136,16 @@ class Node(object):
 
     def can_fit(self, task, pack=False):
         cpu_offset = self.cpu_free() - task.cpu
+        ok = True
         if cpu_offset < 0:
             logging.info(resource_insuffcient_msg, self.node_id, 'cpu', task.task_id, task.cpu, self.cpu_free())
+            ok = False
         mem_offset = self.mem_free() - task.mem
         if mem_offset < 0:
             logging.info(resource_insuffcient_msg, self.node_id, 'mem', task.task_id, task.mem, self.mem_free())
+            ok = False
+        if not ok:
+            return False
 
         result = False
         if not pack:
@@ -143,7 +156,7 @@ class Node(object):
             result = (cpu_offset >= 0) and (mem_offset >= 0) and (gpu_offset >= 0)
         else:
             for _, d in self.device_cache.items():
-                if d.memory - (d.get_current_memory() + task.gpu_memory_max) > 500:
+                if d.can_fit(task):
                     result = True
 
         return result
@@ -240,7 +253,7 @@ class Node(object):
                     for jt in job.tasks.items():
                         job.tasks_running_on.pop(jt.task_id, None)
                         self.placed_tasks.pop(jt.task_id, None)
-                        self.release_allocated_resources(jt)
+                        self.release_allocated_resources(jt, reserved=True)
                     self.placed_jobs.pop(job.job_id)
                     util.print_fn("RELEASED: Job does not fit on node", util.LOG_LEVEL_WARNING)
                     return result
