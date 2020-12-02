@@ -45,7 +45,6 @@ class Scheduler(object):
         scheduling_algo = algorithm.scheduling_algorithms[self.schedule]
         placement_algo = algorithm.placement_algorithms[self.placement]
         nodes, job, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager, delta)
-        self.jobs_manager.add_pending_time()
         if success:
             if self.infrastructure.enable_network_costs:
                 extras = network_service.calculate_network_costs(self.infrastructure, job)
@@ -71,15 +70,24 @@ class Scheduler(object):
                     if d.is_idle():
                         idle_devices.append((n.node_id, d.device_id))
                     else:
-                        load = len(d.running_task)
+                        load = len(d.running_tasks)
                         if load > most_overload_count:
                             most_overload_device = d
     
         if len(idle_devices) == 0:
             return
-        # TODO: Migrate
-        return 
 
+        target_job = None
+        target_util = 0
+        if most_overload_device is not None and most_overload_count > 2:
+            for t in most_overload_device.running_tasks.values():
+                if t.gpu_utilization_avg > target_util:
+                    target_job = t.job_id
+                    target_util = t.gpu_utilization_avg
+        
+        if target_job is not None:
+            logging.info("*******preempting: %s on device %s  " % (target_job, most_overload_device.device_id))
+            self.jobs_manager.preempt(target_job)
     
     def _construct_info(self):
         idle_nodes = 0
@@ -136,7 +144,9 @@ class Scheduler(object):
                 running_task = self.infrastructure.nodes[node_id].running_tasks.pop(task_id)
                 assert not running_task.finished
                 jtf.task_finished(task_id)
-                self.infrastructure.nodes[node_id].release_allocated_resources(running_task)
+                reduce_interference_set = self.infrastructure.nodes[node_id].release_allocated_resources(running_task)
+                if len(reduce_interference_set) > 0:
+                    self.jobs_manager.reset_interference(reduce_interference_set)
                 success = jtf.try_finished()
                 if success:
                     logging.info("job %s finish" % (jtf.job_id))
@@ -173,29 +183,22 @@ class Scheduler(object):
             # scale factor - scale the running minutes
             _ = self.jobs_manager.gen_jobs(delta_time, scale_factor=0.5)
             if self.jobs_manager.queuing_jobs(delta_time) > 0:
-                # TODO: this will likely to be changed
                 self._schedule(delta_time)
             current_remaining = self.jobs_manager.remaining_jobs(delta_time)
             queuing_jobs = self.jobs_manager.queuing_jobs(delta_time)
             delta_time += 1
             time.sleep(1)
+            self.jobs_manager.step()
             self.release_finished_jobs(delta_time)
             running_jobs = len(self.jobs_manager.running_jobs)
-            if self.enable_migration:
+            if self.enable_migration and delta_time > 100:
                 self._scan_for_migrate()
             steps += 1
             loginfo = self._construct_info()
             self.log_manager.step_cluster(loginfo, delta_time)
             util.print_fn("Remaining jobs: %d, Queuing Jobs: %d Running Jobs: %d Finished Jobs %d" %
                            (current_remaining, queuing_jobs, running_jobs, len(self.jobs_manager.finished_jobs)))
-            util.print_fn("running keys: %s " % str(self.jobs_manager.running_jobs.keys()))
-            # for k, v in iter(self.infrastructure.nodes.items()):
-                # util.print_fn("Node %s is %s, GPU used %d, each node has tasks %s, gpu_utilizations %s" %
-            #                   (k,
-            #                    'busy' if len(v.running_tasks) > 0 else 'free',
-            #                    v.gpu_used,
-            #                    str(v.running_tasks.keys()),
-            #                    str(v.gpu_mem_utilizations)))
+            util.print_fn("running jobs: %s " % (self.jobs_manager.running_jobs.keys()))
 
         finished_time = time.time()
         total_time_taken = finished_time - start_time

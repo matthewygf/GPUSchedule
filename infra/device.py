@@ -8,6 +8,7 @@ class Device(object):
         self.node_id = node_id
         self.memory = memory_cap
         self.enable_pack = enable_pack
+        # should have been called placed_task
         self.running_tasks = OrderedDict()
 
     def is_idle(self):

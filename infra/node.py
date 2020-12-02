@@ -72,14 +72,22 @@ class Node(object):
         # clear tasks
         self.cpu_used -= task.cpu
         self.mem_used -= task.mem
+        reduce_interference_set = {}
         for d_id, d in self.device_cache.items():
             poped = d.running_tasks.pop(task.task_id, None)
+            if len(d.running_tasks) <= 1:
+                for t in d.running_tasks.values():
+                    if t.interfered:
+                        reduce_interference_set[t.task_id] = t.job_id
+
             self.device_cache[d_id] = d
             if poped is not None:
                 if not reserved:
                     logging.info("finishing task: %s at node %s device %s" %(task.task_id, self.node_id, d_id))
         if not reserved:
             self.finished_tasks.append(task.task_id)
+
+        return reduce_interference_set
 
     def is_idle(self):
         count = len(self.running_tasks)
@@ -173,12 +181,26 @@ class Node(object):
         #logging.info("running nodes: %s" % (running_nodes))
         if self.node_id not in running_nodes:
             raise ValueError()
-
+        
+        
+        # add interference latency
+        # if its device has multiple task
+        interference_set = set()
+        for _, d in self.device_cache.items():
+            if len(d.running_tasks) >= 2:
+                for t in d.running_tasks.values():
+                    interference_set.add(t.task_id)
+            
         for k, v in iter(job_to_execute.tasks_running_on.items()):
             #logging.info("%s - %s" % (k,v))
             if v == self.node_id:
                 jt = self.placed_tasks.pop(k)
                 jt.execute(delta_time)
+                if jt in interference_set and not jt.interfered:
+                    jt.duration = jt.duration * 1.2
+                    jt.interfered = True
+                    job_to_execute.tasks[jt.task_id] = jt
+                
                 self.running_tasks[k] = jt
                 #logging.info("executing task: %s" % k)
         result, started_task_count = job_to_execute.try_execute(delta_time)

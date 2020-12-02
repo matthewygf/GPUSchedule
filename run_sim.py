@@ -54,6 +54,8 @@ flags.DEFINE_integer('num_node_p_switch', 32,
                      '''Part of cluster spec: the number of nodes under a single switch, default is 32''')
 flags.DEFINE_boolean('enable_network_costs', False,
                     '''Enable network costs when communicating over more nodes, default is False''')
+flags.DEFINE_boolean('enable_migration', False,
+                    '''Enable preempt and migrate during scheduling''')
 
 flags.DEFINE_integer('bandwidth', 1250,
                      '''
@@ -1723,7 +1725,7 @@ def main(log_manager):
     jq_manager = jq.JobQueueManager(FLAGS, trace_path)
 
     jobs_manager = am.JobsManager(FLAGS, jq_manager)
-    scheduler = sche.Scheduler(infrastructure, jobs_manager, log_manager)
+    scheduler = sche.Scheduler(infrastructure, jobs_manager, log_manager, enable_migration=FLAGS.enable_migration)
 
     # NOTE: start simulation
     scheduler.start()

@@ -38,13 +38,23 @@ class Task(CompareAbleByUtilization):
         self.started = False
         self.running = False
         self.finished = False
+        self.interfered = False
         self.migration_count = 0
+        self.time_processed = 0
 
     def execute(self, delta_time):
         self.start_time = delta_time
         self.migration_count += 1
         self.started = True
         self.running = True
+    
+    def preempted(self):
+        self.running = False
+
+    def step(self):
+        if not self.running:
+            return
+        self.time_processed += 1
 
 
 class Job(CompareAbleByUtilization):
@@ -153,6 +163,24 @@ class Job(CompareAbleByUtilization):
             self.running = True
             return True, executed_tasks_count
         return False, executed_tasks_count
+
+    def preempted(self):
+        self.running = False
+        for t in self.tasks.values():
+            t.preempted()
+
+    def step(self):
+        if not self.running:
+            return
+
+        for t in self.tasks.values():
+            t.step()
+
+    def time_processed(self):
+        done = 0
+        for t in self.tasks.values():
+            done = max(done, t.time_processed)
+        return done
 
     def add_network_costs(self, extra_s):
         self.duration += extra_s

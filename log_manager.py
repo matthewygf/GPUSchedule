@@ -29,6 +29,12 @@ class LogManager(object):
         self.log_path = log_path
         self.flags = flags
         self.is_count = self.flags.scheme == 'count'
+        self.cluster_stats_header = [
+            'delta', 'num_idle_nodes', 'num_busy_nodes',
+            'num_busy_gpus', 'num_idle_gpus', 'avg_gpu_utilization',
+            'avg_gpu_memory_allocated', 'avg_pending_time',
+            'num_running_jobs', 'num_queuing_jobs',
+            'num_finish_jobs']
     
     def init(self, infrastructure):
         self.log_cluster = os.path.join(self.log_path, 'cluster.csv')
@@ -44,13 +50,8 @@ class LogManager(object):
     def _init_all_csv(self, infrastructure):
         # init cluster log
         cluster_log = open(self.log_cluster, 'w+')
-        writer = csv.writer(cluster_log)
-        writer.writerow([
-            'delta', 'num_idle_nodes', 'num_busy_nodes',
-            'num_busy_gpus', 'num_idle_gpus', 'avg_gpu_utilization',
-            'avg_gpu_memory_allocated', 'avg_pending_time',
-            'num_running_jobs', 'num_queuing_jobs',
-            'num_finish_jobs'])
+        writer = csv.DictWriter(cluster_log, self.cluster_stats_header)
+        writer.writeheader()
         cluster_log.close()
 
         # init cpu, gpu, mem, network logs
@@ -105,7 +106,7 @@ class LogManager(object):
     
     def step_cluster(self, loginfo, delta):
         with open(self.log_cluster, 'a+') as f:
-            writer = csv.writer(f)
+            writer = csv.DictWriter(f, fieldnames=self.cluster_stats_header)
             writer.writerow({
                 'delta': delta,
                 'num_idle_nodes': loginfo.idle_ns,

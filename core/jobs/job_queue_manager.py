@@ -100,6 +100,10 @@ class JobQueueManager(object):
             return heappop(self.queues[queue_idx])
 
         return self.queues[queue_idx].pop(job_in_queue)
+    
+    def pop_all_queuing_jobs(self):
+        """NOTE: this fn will remove all the jobs from the queues."""
+        pass
 
     def insert(self, job, queue_idx=0, job_in_queue=0):
         if self.queues_is_pq[queue_idx]:

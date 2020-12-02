@@ -9,9 +9,10 @@ def main():
     scheme = 'horus'
     # scheme = 'yarn'
     num_nodes_p_switch = 32
-    num_switch = 8
+    num_switch = 4
     schedule = 'horus'
     # schedule = 'fifo'
+    migrate = True
     trace_file = 'month'
     log_sub_dir = "nodes_p_s"+str(num_nodes_p_switch) + "_job_" + trace_file
     log_path = os.path.join(log_sub_dir, f"{scheme}_{schedule}")
@@ -25,6 +26,7 @@ def main():
         '--trace_file', os.path.join("data",trace_file+'.csv'),
         '--schedule', schedule,
         '--enable_network_costs', 'False',
+        '--enable_migration', str(migrate),
         '--log_path', log_path
     ]
     p = Popen(cmd)

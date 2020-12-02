@@ -130,7 +130,7 @@ def horus_placement(infrastructure, next_job):
             if pop_t is not None:
                 infrastructure.nodes[assigned_node].release_allocated_resources(pop_t, reserved=True)
         
-        assert poped_job[next_job.job_id] == len(next_job.tasks)
+        # assert poped_job[next_job.job_id] == len(next_job.tasks)
 
 
         if len(best_assignment_for_node[i][1]) >= num_tasks:
