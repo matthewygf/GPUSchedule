@@ -232,10 +232,18 @@ def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **k
     assert len(look_ahead) == current_len - 1
     jobs_manager.insert(look_ahead)
     return nodes_to_schedule, target_job, True
-    
+
+def schedule_horus_plus(placement_algo, infrastructure, jobs_manager, delta, k=5, **kwargs):
+    '''
+    poped from the queue with the most credit.
+    - like a leaky bucket.
+    '''
+    pass
+
 scheduling_algorithms = {
     'fifo': schedule_fifo,
     'horus': schedule_horus,
+    'horus+': schedule_horus_plus
     # 'sf': schedule_smallest_first
 }
 

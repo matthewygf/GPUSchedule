@@ -103,7 +103,13 @@ class JobQueueManager(object):
     
     def pop_all_queuing_jobs(self):
         """NOTE: this fn will remove all the jobs from the queues."""
-        pass
+        jobs = []
+        for q_idx in range(self.num_queue):
+            num = len(self.queues[q_idx])
+            for _ in range(num):
+                poped = self.pop(q_idx)
+                jobs.append(poped)
+        return jobs
 
     def insert(self, job, queue_idx=0, job_in_queue=0):
         if self.queues_is_pq[queue_idx]:

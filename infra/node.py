@@ -178,7 +178,9 @@ class Node(object):
 
         # logging.info("Job: %s --- tasks running on: %s" % (job_id, job_to_execute.tasks_running_on))
         running_nodes = set(job_to_execute.tasks_running_on.values())
-        #logging.info("running nodes: %s" % (running_nodes))
+
+        # TODO: add cross racks latency
+
         if self.node_id not in running_nodes:
             raise ValueError()
         
@@ -192,7 +194,6 @@ class Node(object):
                     interference_set.add(t.task_id)
             
         for k, v in iter(job_to_execute.tasks_running_on.items()):
-            #logging.info("%s - %s" % (k,v))
             if v == self.node_id:
                 jt = self.placed_tasks.pop(k)
                 jt.execute(delta_time)
@@ -202,7 +203,6 @@ class Node(object):
                     job_to_execute.tasks[jt.task_id] = jt
                 
                 self.running_tasks[k] = jt
-                #logging.info("executing task: %s" % k)
         result, started_task_count = job_to_execute.try_execute(delta_time)
         if result:
             return job_to_execute, started_task_count

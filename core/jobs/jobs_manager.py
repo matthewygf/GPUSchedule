@@ -84,27 +84,31 @@ class JobsManager(object):
         if self.flags.schedule == "fifo":
             for _ in jobs:
                 queue_pos.append(idx)
+            return queue_pos, jobs
         elif self.flags.schedule == "horus":
             #one queue also in horus normal ver.
             for _ in jobs:
                 queue_pos.append(idx)
+            return queue_pos, jobs
         elif self.flags.schedule == "horus+":
+            if len(jobs) == 0:
+                return queue_pos, jobs
             # kmeans and see.
             # cluster all jobs again.
-            queuing_jobs = self.job_queue_manager.pop_all_queuing_jobs()
-            all_jobs = queuing_jobs + jobs
-            centroids, sorted_jobs, loss = clusterize(all_jobs, k=len[self.job_queue_manager.queues])
-            logging.info("k-means: %s queues pos: %s - loss at %.2f" % (str(centroids), str(sorted_jobs), loss))
-            raise NotImplementedError()
-            return sorted_jobs
+            centroids, queue_pos, loss = clusterize(jobs, k=len(self.job_queue_manager.queues))
+            logging.info("k-means: %s queues pos: %s - loss at %.2f" % (str(centroids), str(queue_pos), loss))
+            return queue_pos, jobs
         else:
             raise NotImplementedError()
         return queue_pos
 
 
     def insert(self, jobs):
+        if self.flags.schedule == "horus+":
+            queued_jobs = self.job_queue_manager.pop_all_queuing_jobs()
+            jobs = queued_jobs + jobs
         jobs_insert_position = self.get_insert_position(jobs)
-        queue_insert_position = self.get_queue_position(jobs)
+        queue_insert_position, jobs = self.get_queue_position(jobs)
         for job, q_index, j_index in zip(jobs, queue_insert_position, jobs_insert_position):
             self.job_queue_manager.insert(job, q_index, j_index)
 
