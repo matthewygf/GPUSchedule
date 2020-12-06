@@ -1,8 +1,10 @@
+import logging
 import os
 import csv
 from core import util
 from core.jobs import job
 from heapq import *
+import numpy as np
 
 class JobQueueManager(object):
     """
@@ -14,8 +16,9 @@ class JobQueueManager(object):
         self.num_queue = flags.num_queue
         self.queues = [list() for i in range(self.num_queue)]
         self.queue_limit = [9999 for i in range(self.num_queue)]
-        self.queues_is_pq = [False for i in range(self.num_queue)]
-        #TODO: whats to do with the workers and gittins
+        self.queue_credits = [0 for i in range(self.num_queue)]
+        self.queues_is_pq = [True if self.flags.schedule.startswith("horus") else False for _ in range(self.num_queue) ]
+        # TODO: whats to do with the workers and gittins
         # mem info in GB
         # self.worker_mem = 5
         # self.ps_mem = 6
@@ -95,9 +98,32 @@ class JobQueueManager(object):
     def get_next_job(self, queue_idx=0, job_in_queue=0):
         return self.queues[queue_idx][job_in_queue]
 
+    def queue_idx_by_credit(self):
+        # a [1,2,3,4]
+        # b [1,2,3,4,5,6,7,8]
+        # c [1,2,3,4,5,6,7,8,9,10]
+
+        # timestep 1 - 2 : choose c
+        # timestep 3: break ties with b,c
+        # timestep 4: choose the opposite of timestep 3
+        # timestep 10: break ties with a,b,c
+        logging.info("queue credits: %s", str(self.queue_credits))
+        q_idx = np.argmax(self.queue_credits)
+        return q_idx
+    
+    def update_credits(self):
+        for q in range(0, self.num_queue):
+            logging.info(q)
+            if len(self.queues[q]) > 0:
+                self.queue_credits[q] = sum([j.pending_time for j in self.queues[q]]) + len(self.queues[q])
+            else:
+                self.queue_credits[q] = 0
+
     def pop(self, queue_idx=0, job_in_queue=0):
         if self.queues_is_pq[queue_idx]:
-            return heappop(self.queues[queue_idx])
+            if len(self.queues[queue_idx]) > 0:
+                return heappop(self.queues[queue_idx])
+            raise ValueError("Length of queue %d is %d" % (queue_idx, len(self.queues[queue_idx])))
 
         return self.queues[queue_idx].pop(job_in_queue)
     
@@ -112,7 +138,10 @@ class JobQueueManager(object):
         return jobs
 
     def insert(self, job, queue_idx=0, job_in_queue=0):
+        self.queue_credits[queue_idx] = self.queue_credits[queue_idx] + 1
+
         if self.queues_is_pq[queue_idx]:
             return heappush(self.queues[queue_idx], job)
-            
+        
+
         return self.queues[queue_idx].insert(job_in_queue, job)

@@ -53,6 +53,9 @@ class Scheduler(object):
                 util.print_fn("Job %s : Original duration %f , New duration %f" %
                             (job.job_id, orginal_duration, job.duration))
             self.add_to_running(nodes, job.job_id, delta)
+            assert jobs_all - 1 == self.jobs_manager.total_jobs(delta), (
+                'Expected %d - Got %d' % (jobs_all-1, self.jobs_manager.total_jobs(delta))
+            )
         else:
             assert (jobs_all == self.jobs_manager.total_jobs(delta))
 
@@ -198,6 +201,7 @@ class Scheduler(object):
             self.log_manager.step_cluster(loginfo, delta_time)
             util.print_fn("Remaining jobs: %d, Queuing Jobs: %d Running Jobs: %d Finished Jobs %d" %
                            (current_remaining, queuing_jobs, running_jobs, len(self.jobs_manager.finished_jobs)))
+            util.print_fn("Total Jobs in Memory: %d" % (current_remaining+queuing_jobs+running_jobs+len(self.jobs_manager.finished_jobs)))
             util.print_fn("running jobs: %s " % (self.jobs_manager.running_jobs.keys()))
 
         finished_time = time.time()

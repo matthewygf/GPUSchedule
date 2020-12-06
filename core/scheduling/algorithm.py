@@ -178,7 +178,8 @@ def horus_placement(infrastructure, next_job):
 
 placement_algorithms = {
     'yarn': ms_yarn_placement,
-    'horus': horus_placement
+    'horus': horus_placement,
+    'horus+': horus_placement,
 }
 
 
@@ -238,7 +239,51 @@ def schedule_horus_plus(placement_algo, infrastructure, jobs_manager, delta, k=5
     poped from the queue with the most credit.
     - like a leaky bucket.
     '''
-    pass
+    #. 1. get min(k, queuing) jobs
+    look_ahead = []
+    look_ahead_q = []
+    total_jobs = jobs_manager.total_jobs(delta)
+    min_k = max(0, min(k, jobs_manager.queuing_jobs(delta)))
+    if min_k == 0:
+        return None, None, False
+    logging.info("min K: %d", min_k)
+    for _ in range(0, min_k):
+        jobs_manager.job_queue_manager.update_credits()
+        q_idx = jobs_manager.job_queue_manager.queue_idx_by_credit()
+        j = jobs_manager.pop(delta, queue_idx = q_idx)
+        assert j.is_waiting()
+        look_ahead.append(j)
+        look_ahead_q.append(q_idx)
+    
+    current_len = len(look_ahead)
+    assert current_len == min_k
+
+    #. 2. for each job, score each node
+    look_ahead_pos = None
+    nodes_to_schedule = None
+    for idx, j in enumerate(look_ahead):
+        nodes, success = placement_algo(infrastructure, j)
+        
+        if success:
+            look_ahead_pos = idx
+            nodes_to_schedule = nodes
+            break
+    
+    #. 3. schedule the first job that is successful
+    #  as it's already sorted by utilization
+    #  then put the rest of the jobs back into the corresponding queue.
+    if look_ahead_pos is None or nodes_to_schedule is None:
+        assert len(look_ahead_pos) == len(look_ahead)
+        assert len(look_ahead) == current_len
+        jobs_manager.insert(look_ahead, queue_insert_position=look_ahead_q)
+        assert total_jobs == jobs_manager.total_jobs(delta)
+        return None, None, False
+    target_job = look_ahead.pop(look_ahead_pos)
+    look_ahead_q.pop(look_ahead_pos)
+    assert len(look_ahead) == current_len - 1
+    jobs_manager.insert(look_ahead, queue_insert_position=look_ahead_q)
+    assert total_jobs-1 == jobs_manager.total_jobs(delta)
+    return nodes_to_schedule, target_job, True
 
 scheduling_algorithms = {
     'fifo': schedule_fifo,

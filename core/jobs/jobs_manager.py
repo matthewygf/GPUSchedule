@@ -92,31 +92,51 @@ class JobsManager(object):
             return queue_pos, jobs
         elif self.flags.schedule == "horus+":
             if len(jobs) == 0:
-                return queue_pos, jobs
+                return queue_pos
             # kmeans and see.
             # cluster all jobs again.
             centroids, queue_pos, loss = clusterize(jobs, k=len(self.job_queue_manager.queues))
             logging.info("k-means: %s queues pos: %s - loss at %.2f" % (str(centroids), str(queue_pos), loss))
-            return queue_pos, jobs
+            return queue_pos
         else:
             raise NotImplementedError()
         return queue_pos
 
 
-    def insert(self, jobs):
-        if self.flags.schedule == "horus+":
+    def insert(self, jobs, queue_insert_position=None):
+        if self.flags.schedule == "horus+" and queue_insert_position is None:
+            q_len = self.job_queue_manager.total_jobs()
+            o_len = len(jobs)
             queued_jobs = self.job_queue_manager.pop_all_queuing_jobs()
             jobs = queued_jobs + jobs
+            assert len(jobs) == q_len + o_len
+            # logging.info("jobs1 : %d" % len(jobs))
         jobs_insert_position = self.get_insert_position(jobs)
-        queue_insert_position, jobs = self.get_queue_position(jobs)
+        assert len(jobs) == len(jobs_insert_position)
+        # logging.info("jobs2 : %d" % len(jobs))
+
+        if queue_insert_position is None:
+            queue_insert_position = self.get_queue_position(jobs)
+        assert len(jobs) == len(queue_insert_position), (
+            "Expected %d - Got %d" % (len(jobs), len(queue_insert_position))
+        )
+        # logging.info("jobs3 : %d" % len(jobs))
+
         for job, q_index, j_index in zip(jobs, queue_insert_position, jobs_insert_position):
             self.job_queue_manager.insert(job, q_index, j_index)
-
+            # logging.info("%d %d %d" ,self.job_queue_manager.total_jobs(), q_index, j_index)
+        if self.flags.schedule == "horus+" and queue_insert_position is None:
+            assert len(jobs) == self.job_queue_manager.total_jobs(), (
+                "Expected %d Got %d" % (len(jobs), self.job_queue_manager.total_jobs())
+            )
+            
 
     def step(self):
         self.add_pending_time()
         for j in self.running_jobs.values():
             j.step()
+        if self.flags.schedule == "horus+":
+            self.job_queue_manager.update_credits()
 
     def preempt(self, job_id, infrastructure):
         poped_job = self.running_jobs.pop(job_id)

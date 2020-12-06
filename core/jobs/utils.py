@@ -4,8 +4,8 @@ import logging
 def job_dist(x, y):
   score = abs(len(x.tasks) - len(y.tasks))
   score += abs(x.gpu_utilization_avg - y.gpu_utilization_avg)
-  score += (x.gpu_per_worker - y.gpu_per_worker)**2
-  score += (x.gpus - y.gpus)**2
+  score += abs(x.gpu_per_worker - y.gpu_per_worker)
+  score += abs(x.gpus - y.gpus)
   score += abs(x.gpu_utilization_max - y.gpu_utilization_max)
   score += abs(x.gpu_mem_avg - y.gpu_mem_avg)
   score += abs(x.gpu_mem_max - y.gpu_mem_max)
@@ -23,7 +23,7 @@ def transform_to_dist(job):
 
 def get_closest(jobs, score):
   c = None
-  c_score = 999
+  c_score = 99999999999
   for j in jobs:
     dist = transform_to_dist(j)
     temp = abs(dist - score)
