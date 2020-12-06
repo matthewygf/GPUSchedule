@@ -113,7 +113,7 @@ class JobQueueManager(object):
     
     def update_credits(self):
         for q in range(0, self.num_queue):
-            logging.info(q)
+            # logging.info(q)
             if len(self.queues[q]) > 0:
                 self.queue_credits[q] = sum([j.pending_time for j in self.queues[q]]) + len(self.queues[q])
             else:

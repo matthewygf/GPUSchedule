@@ -273,7 +273,6 @@ def schedule_horus_plus(placement_algo, infrastructure, jobs_manager, delta, k=5
     #  as it's already sorted by utilization
     #  then put the rest of the jobs back into the corresponding queue.
     if look_ahead_pos is None or nodes_to_schedule is None:
-        assert len(look_ahead_pos) == len(look_ahead)
         assert len(look_ahead) == current_len
         jobs_manager.insert(look_ahead, queue_insert_position=look_ahead_q)
         assert total_jobs == jobs_manager.total_jobs(delta)
