@@ -3,7 +3,7 @@ from infra.device import Device
 from core import util
 from collections import OrderedDict
 from infra.msg import resource_insuffcient_msg
-
+import infra.interference as interference 
 class Node(object):
     def __init__(self, rack_id, node_id, 
                  gpu_memory_capacity=0, cpus=0, 
@@ -31,6 +31,7 @@ class Node(object):
         self.placed_tasks = {}
         self.placed_jobs = {}
         self.finished_tasks = []
+        self.interference_factor = interference.FACTOR
 
     def get_network_usage(self):
         # assumed the jjob can 
@@ -172,7 +173,7 @@ class Node(object):
     def execute_job(self, job_id, delta_time):
         # check placed tasks in current node that is correspond to same job_id
         started_task_count = 0
-        job_to_execute = self.placed_jobs.pop(job_id, None)
+        job_to_execute = self.placed_jobs.get(job_id, None)
         if job_to_execute is None:
             raise ValueError()
 
@@ -198,7 +199,7 @@ class Node(object):
                 jt = self.placed_tasks.pop(k)
                 jt.execute(delta_time)
                 if jt in interference_set and not jt.interfered:
-                    jt.duration = jt.duration * 1.2
+                    jt.duration = jt.duration * (1+self.interference_factor)
                     jt.interfered = True
                     job_to_execute.tasks[jt.task_id] = jt
                 

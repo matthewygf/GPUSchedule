@@ -4,6 +4,7 @@ from core import util
 from core.jobs import job_generator
 import logging
 from core.jobs.utils import clusterize
+import infra.interference as interference 
 
 class JobsManager(object):
     """
@@ -22,6 +23,7 @@ class JobsManager(object):
         self.running_jobs = {}
         self.finished_jobs = {}
         self.busy_nodes = []
+        self.interference_factor = interference.FACTOR
     
     def sort_job_trace(self):
         for i, q in enumerate(self.job_queue_manager.queues):
@@ -49,7 +51,7 @@ class JobsManager(object):
             for _ in jobs:
                 insert_pos.append(idx)
                 idx += 1
-        elif self.flags.schedule.startswith("horus"):
+        elif self.flags.schedule.startswith("horus") or self.flags.schedule == "gandiva":
             # doesn't matter, let the queue do its priority heapsort
             for _ in jobs:
                 insert_pos.append(idx)
@@ -63,7 +65,7 @@ class JobsManager(object):
         for i in range(0, num_queues):
             num_jobs = len(self.job_queue_manager.queues[i])
             for j in range(0, num_jobs):
-                self.job_queue_manager.queues[i][j].pending_time += 1
+                self.job_queue_manager.queues[i][j].step_pending()
 
     def avg_pending_time(self):
         num_queues = len(self.job_queue_manager.queues)
@@ -81,15 +83,15 @@ class JobsManager(object):
         ''' based on flags, identify the queues position to insert'''
         queue_pos = []
         idx = 0
-        if self.flags.schedule == "fifo":
+        if self.flags.schedule == "fifo" or self.flags.schedule == "gandiva":
             for _ in jobs:
                 queue_pos.append(idx)
-            return queue_pos, jobs
+            return queue_pos
         elif self.flags.schedule == "horus":
             #one queue also in horus normal ver.
             for _ in jobs:
                 queue_pos.append(idx)
-            return queue_pos, jobs
+            return queue_pos
         elif self.flags.schedule == "horus+":
             if len(jobs) == 0:
                 return queue_pos
@@ -140,16 +142,26 @@ class JobsManager(object):
 
     def preempt(self, job_id, infrastructure):
         poped_job = self.running_jobs.pop(job_id)
+        poped_already = set()
         for t, n in poped_job.tasks_running_on.items():
-            infrastructure.nodes[n].placed_jobs.pop(job_id)
-            pop_t = infrastructure.nodes[n].placed_tasks.pop(t, None)
+            if n not in poped_already:
+                infrastructure.nodes[n].placed_jobs.pop(job_id)
+                poped_already.add(n)
+
+            pop_t = infrastructure.nodes[n].running_tasks.pop(t, None)
             if pop_t is not None:
                 reduce_interference_set = infrastructure.nodes[n].release_allocated_resources(pop_t, reserved=True)
-                if len(reduce_interference_set) > 0 and t in reduce_interference_set:
-                    if pop_t.interfered:
+                if len(reduce_interference_set) > 0:
+                    # reduce interference for poped task
+                    if t in reduce_interference_set and pop_t.interfered:
                         pop_t.interfered = False
-                        pop_t.duration = pop_t.duration * 0.8
+                        pop_t.duration = pop_t.duration * (1-self.interference_factor)
                         poped_job.tasks[t] = pop_t
+                        reduce_interference_set.pop(t)
+
+                    # reduce interference for the rest
+                    self.reset_interference(reduce_interference_set)
+
         poped_job.preempted()
         self.insert([poped_job])
 
@@ -160,7 +172,7 @@ class JobsManager(object):
                 running_t = running_j.tasks[t]
                 if running_t.interfered:
                     running_t.interfered = False
-                    running_t.duration = running_t.duration * 0.8
+                    running_t.duration = running_t.duration * (1-self.interference_factor)
                     running_j.tasks[t] = running_t
                 self.running_jobs[j] = running_j
 

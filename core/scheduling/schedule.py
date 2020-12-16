@@ -44,7 +44,7 @@ class Scheduler(object):
         util.print_fn("ALL jobs: %d" % (jobs_all))
         scheduling_algo = algorithm.scheduling_algorithms[self.schedule]
         placement_algo = algorithm.placement_algorithms[self.placement]
-        nodes, job, success = scheduling_algo(placement_algo, self.infrastructure, self.jobs_manager, delta)
+        nodes, job, success = scheduling_algo(self.schedule, placement_algo, self.infrastructure, self.jobs_manager, delta)
         if success:
             if self.infrastructure.enable_network_costs:
                 extras = network_service.calculate_network_costs(self.infrastructure, job)
@@ -196,6 +196,10 @@ class Scheduler(object):
             running_jobs = len(self.jobs_manager.running_jobs)
             if self.enable_migration and delta_time > 100:
                 self._scan_for_migrate()
+            
+            post_schedule = algorithm.plugin_algorithms.get(self.schedule, None)
+            if post_schedule is not None:
+                post_schedule(self.infrastructure, self.jobs_manager)
             steps += 1
             loginfo = self._construct_info()
             self.log_manager.step_cluster(loginfo, delta_time)

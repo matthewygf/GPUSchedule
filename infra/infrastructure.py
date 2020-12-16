@@ -21,6 +21,7 @@ class Infrastructure(object):
     3. mem per node is the same
     4. bandwidth of the rack is the same
     5. num machine per rack is the same
+    TODO: multiple clusters 
     """
     def __init__(self, flags):
         self.flags = flags

@@ -1,13 +1,9 @@
-class CompareAbleByUtilization(object):
-    
-    def __lt__(self, other):
-        '''max heap by utilization'''
-        if self.gpu_utilization_avg:
-            return self.gpu_utilization_avg > other.gpu_utilization_avg
 
-        return False
+from core.jobs import base_factory
 
-class Task(CompareAbleByUtilization):
+BASE = base_factory.BASE_OBJ.base
+
+class Task(BASE):
     """NOTE: 
     each job can have multiple tasks, 
     each task can be identified from job_id
@@ -34,6 +30,7 @@ class Task(CompareAbleByUtilization):
         self.gpu_utilization_max = gpu_utilization_max
         self.gpu_memory_avg=gpu_mem_avg
         self.gpu_memory_max=gpu_mem_max
+        self.pending_time = 0
         self.duration = duration
         self.started = False
         self.running = False
@@ -41,6 +38,7 @@ class Task(CompareAbleByUtilization):
         self.interfered = False
         self.migration_count = 0
         self.time_processed = 0
+        super().__init__()
 
     def execute(self, delta_time):
         self.start_time = delta_time
@@ -50,6 +48,7 @@ class Task(CompareAbleByUtilization):
     
     def preempted(self):
         self.running = False
+        self.pending_time = 0
 
     def step(self):
         if not self.running:
@@ -57,7 +56,7 @@ class Task(CompareAbleByUtilization):
         self.time_processed += 1
 
 
-class Job(CompareAbleByUtilization):
+class Job(BASE):
     """
     NOTE:
     Assumption:
@@ -106,6 +105,8 @@ class Job(CompareAbleByUtilization):
         self.tasks_running_on = {}
         self.tasks_finished = 0
         self.tasks = self.setup_tasks()
+        super().__init__()
+
     
     def total_cpus_required(self):
         return self.cpus_per_task * self.task_count
@@ -125,7 +126,7 @@ class Job(CompareAbleByUtilization):
         return result
 
     def is_waiting(self):
-        result = not self.started and not self.running
+        result = not self.running
         return result
     
     def is_preempted(self):
@@ -146,6 +147,12 @@ class Job(CompareAbleByUtilization):
             self.finished = True
             return True
         return False
+
+    def step_pending(self):
+        self.pending_time += 1
+        for t_id, t in self.tasks.items():
+            t.pending_time += 1
+            self.tasks[t_id] = t
 
     def try_execute(self, delta_time):
         """
@@ -168,6 +175,7 @@ class Job(CompareAbleByUtilization):
         self.running = False
         for t in self.tasks.values():
             t.preempted()
+        self.pending_time = 0
 
     def step(self):
         if not self.running:

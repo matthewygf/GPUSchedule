@@ -7,8 +7,7 @@ import os
 
 from core import util
 from core import flags
-from core.jobs import job_queue_manager as jq
-from core.jobs import jobs_manager as am
+from core.jobs import base_factory
 import log_manager as lm
 from core.scheduling import schedule as sche
 from infra import infrastructure as cluster
@@ -1712,11 +1711,18 @@ def main(log_manager):
     if FLAGS.schedule == 'multi-dlas-gpu':
         assert FLAGS.scheme != 'count', 'multi-dlas-gpu need to be without count'
 
+    # NOTE: must do this first
+    base_factory.BASE_OBJ = base_factory.BaseJobFactory(FLAGS)
+    from core.jobs import job_queue_manager as jq
+    from core.jobs import jobs_manager as am
+
     #init infrastructure
     infrastructure = cluster.Infrastructure(FLAGS)
 
     # init Logging
     log_manager.init(infrastructure)
+
+    logging.info("Base job class: %s" % str(base_factory.BASE_OBJ))
 
     # # NOTE: init scheduler and jobs
     project_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))

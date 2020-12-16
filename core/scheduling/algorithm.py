@@ -3,9 +3,14 @@ import math
 from core import util
 import numpy as np
 from collections import OrderedDict
-from core.scheduling.horus import horus_score
+from core.scheduling.horus import horus_score, gandiva_score
 from heapq import heappop, heappush
 
+score_fn = {
+    'horus': horus_score,
+    'horus+': horus_score,
+    'gandiva': gandiva_score
+}
 
 class NodeDeviceInfo(object):
     def __init__(self, node, device_scores, total_score, min_score):
@@ -20,13 +25,13 @@ class NodeDeviceInfo(object):
     def __lt__(self, other):
         return self.min_score > other.min_score
 
-def ms_yarn_placement(infrastructure, next_job):
+def ms_yarn_placement(infrastructure, next_job, scheme):
     gpu_demand = next_job.gpus
     try_alloc_ms = try_cross_node_alloc_ms if gpu_demand > infrastructure.num_gpu_p_node else try_single_node_alloc_ms
     nodes, success = try_alloc_ms(infrastructure, next_job)
     return nodes, success
 
-def horus_placement(infrastructure, next_job):
+def horus_placement(infrastructure, next_job, scheme):
     ''' horus produce a scores for each node given a job.
         according to gpu utilizations and gpu memory capacity. 
         NOTE: 
@@ -50,7 +55,7 @@ def horus_placement(infrastructure, next_job):
                 continue
             
             # score the node as the sum of the gpu scores ?
-            device_scores, node_sum, min_cost = horus_score(node, t)
+            device_scores, node_sum, min_cost = score_fn[scheme](node, t)
             node_device_info = NodeDeviceInfo(node, device_scores=device_scores, total_score=node_sum, min_score=min_cost)
             heappush(nodes_stack, node_device_info)
 
@@ -130,9 +135,7 @@ def horus_placement(infrastructure, next_job):
             if pop_t is not None:
                 infrastructure.nodes[assigned_node].release_allocated_resources(pop_t, reserved=True)
         
-        # assert poped_job[next_job.job_id] == len(next_job.tasks)
-
-
+        # have enough for current node
         if len(best_assignment_for_node[i][1]) >= num_tasks:
             # if task,node map satisfied the number of task, we should be okay.
             # start again for the next node,
@@ -180,10 +183,10 @@ placement_algorithms = {
     'yarn': ms_yarn_placement,
     'horus': horus_placement,
     'horus+': horus_placement,
+    'gandiva': horus_placement
 }
 
-
-def schedule_fifo(placement_algo, infrastructure, jobs_manager, delta, **kwargs):
+def schedule_fifo(scheme, placement_algo, infrastructure, jobs_manager, delta, **kwargs):
     """NOTE: First in first out, does not preempt or migrate"""
     # F in F out, get the first job from the queue
     next_job = jobs_manager.get_next_job(delta)
@@ -191,14 +194,14 @@ def schedule_fifo(placement_algo, infrastructure, jobs_manager, delta, **kwargs)
         util.print_fn("no job ready at time %d" % (delta))
         return None, None, None
     assert next_job.is_waiting()
-    nodes, success = placement_algo(infrastructure, next_job)
+    nodes, success = placement_algo(infrastructure, next_job, scheme)
     if success:
         _ = jobs_manager.pop(delta)
         return nodes, next_job, success
     
     return nodes, next_job, success
 
-def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **kwargs):
+def schedule_horus(scheme, placement_algo, infrastructure, jobs_manager, delta, k=5, **kwargs):
     """NOTE: schedule based on utilization and queue size."""
     #. 1. get min(k, queuing) jobs
     look_ahead = []
@@ -215,7 +218,7 @@ def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **k
     look_ahead_pos = None
     nodes_to_schedule = None
     for idx, j in enumerate(look_ahead):
-        nodes, success = placement_algo(infrastructure, j)
+        nodes, success = placement_algo(infrastructure, j, scheme)
         
         if success:
             look_ahead_pos = idx
@@ -234,7 +237,7 @@ def schedule_horus(placement_algo, infrastructure, jobs_manager, delta, k=5, **k
     jobs_manager.insert(look_ahead)
     return nodes_to_schedule, target_job, True
 
-def schedule_horus_plus(placement_algo, infrastructure, jobs_manager, delta, k=5, **kwargs):
+def schedule_horus_plus(scheme, placement_algo, infrastructure, jobs_manager, delta, k=5, **kwargs):
     '''
     poped from the queue with the most credit.
     - like a leaky bucket.
@@ -287,7 +290,8 @@ def schedule_horus_plus(placement_algo, infrastructure, jobs_manager, delta, k=5
 scheduling_algorithms = {
     'fifo': schedule_fifo,
     'horus': schedule_horus,
-    'horus+': schedule_horus_plus
+    'horus+': schedule_horus_plus,
+    'gandiva': schedule_fifo
     # 'sf': schedule_smallest_first
 }
 
@@ -409,3 +413,30 @@ def try_single_node_alloc_ms(infrastructure, job):
             allocated = True
             assigned_node[node.node_id] = node
     return assigned_node, allocated
+
+
+def time_slice_check(infrastructure, jobs_manager):
+    '''Only need to time slice if there is queuing jobs'''
+    queue_len = jobs_manager.queuing_jobs()
+    if queue_len == 0:
+        return
+    
+    # NOTE: 
+    # assume time quanta is 100 for now as we have scaled our jobs size.
+    quanta = 100
+
+    # scan through all currently running tasks.
+    todo = []
+    for k, v in jobs_manager.running_jobs.items():
+        processed = v.time_processed()
+        if processed > 1 and processed % quanta == 0:
+            todo.append(k)
+            timeslice_num = processed // quanta
+            logging.info(f"****time slice up for job {k}, time sliced number at: {timeslice_num}")
+    
+    for j in todo:
+        jobs_manager.preempt(j, infrastructure)
+
+plugin_algorithms = {
+    'gandiva': time_slice_check
+}
