@@ -4,8 +4,8 @@ from core import util
 from core.jobs import job_generator
 import logging
 from core.jobs.utils import clusterize
+import numpy as np
 import infra.interference as interference 
-
 class JobsManager(object):
     """
     This acts like the Application/Framework master
@@ -67,17 +67,22 @@ class JobsManager(object):
             for j in range(0, num_jobs):
                 self.job_queue_manager.queues[i][j].step_pending()
 
-    def avg_pending_time(self):
+    def pending_time_infos(self):
         num_queues = len(self.job_queue_manager.queues)
         pending_time = 0
         pending_cnt = 0
+        max_pending = 0
+        all_pend = []
         for i in range(0, num_queues):
             num_jobs = len(self.job_queue_manager.queues[i])
             for j in range(0, num_jobs):
-                pending_time += self.job_queue_manager.queues[i][j].pending_time
+                j_pend = self.job_queue_manager.queues[i][j].pending_time
+                max_pending = max(j_pend, max_pending)
+                all_pend.append(j_pend)
+                pending_time += j_pend
             pending_cnt += num_jobs
-        
-        return pending_time / (pending_cnt + 1e-9)
+
+        return pending_time / (pending_cnt + 1e-9) , float(np.median(all_pend)), max_pending
 
     def get_queue_position(self, jobs):
         ''' based on flags, identify the queues position to insert'''

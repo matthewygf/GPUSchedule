@@ -265,7 +265,7 @@ def schedule_horus_plus(scheme, placement_algo, infrastructure, jobs_manager, de
     look_ahead_pos = None
     nodes_to_schedule = None
     for idx, j in enumerate(look_ahead):
-        nodes, success = placement_algo(infrastructure, j)
+        nodes, success = placement_algo(infrastructure, j, scheme)
         
         if success:
             look_ahead_pos = idx

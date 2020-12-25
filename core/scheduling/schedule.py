@@ -125,10 +125,11 @@ class Scheduler(object):
         finished_jobs = len(self.jobs_manager.finished_jobs)
 
         # for all queuing jobs avg the pending time
-        avg_pending_time = self.jobs_manager.avg_pending_time()
+        avg_pending_time, median_pending_time, max_pending_time = self.jobs_manager.pending_time_infos()
 
         return LogInfo(idle_nodes, busy_nodes, busy_gpus, idle_gpus,
-                     avg_gpu_utilization, avg_gpu_memory_allocated, avg_pending_time,
+                     avg_gpu_utilization, avg_gpu_memory_allocated, avg_pending_time, 
+                     median_pending_time, max_pending_time,
                      running_jobs, queuing_jobs, finished_jobs)
 
 

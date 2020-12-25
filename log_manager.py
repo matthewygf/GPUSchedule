@@ -10,6 +10,8 @@ class LogInfo(object):
                  avg_gpu_utilization,
                  avg_gpu_memory_allocated,
                  avg_pending_time,
+                 median_pending_time,
+                 max_pending_time,
                  num_running_jobs,
                  num_queuing_jobs,
                  num_finish_jobs) -> None:
@@ -20,6 +22,8 @@ class LogInfo(object):
         self.avg_g_utils = avg_gpu_utilization
         self.avg_g_mem = avg_gpu_memory_allocated
         self.avg_pending = avg_pending_time
+        self.median_pending = median_pending_time
+        self.max_pending = max_pending_time
         self.num_running_jobs = num_running_jobs
         self.num_queuing_jobs = num_queuing_jobs
         self.num_finish_jobs = num_finish_jobs
@@ -33,6 +37,8 @@ class LogManager(object):
             'delta', 'num_idle_nodes', 'num_busy_nodes',
             'num_busy_gpus', 'num_idle_gpus', 'avg_gpu_utilization',
             'avg_gpu_memory_allocated', 'avg_pending_time',
+            'median_pending_time',
+            'max_pending_time',
             'num_running_jobs', 'num_queuing_jobs',
             'num_finish_jobs']
     
@@ -116,6 +122,8 @@ class LogManager(object):
                 'avg_gpu_utilization': loginfo.avg_g_utils,
                 'avg_gpu_memory_allocated': loginfo.avg_g_mem,
                 'avg_pending_time': loginfo.avg_pending,
+                'median_pending_time': loginfo.median_pending,
+                'max_pending_time': loginfo.max_pending,
                 'num_running_jobs': loginfo.num_running_jobs,
                 'num_queuing_jobs': loginfo.num_queuing_jobs,
                 'num_finish_jobs': loginfo.num_finish_jobs
