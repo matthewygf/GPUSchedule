@@ -11,3 +11,5 @@ log/**/*.csv
 *.json
 *.vscode
 data/*.csv
+batched
+*.pdf

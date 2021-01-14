@@ -183,7 +183,6 @@ class Scheduler(object):
         running_jobs = len(self.jobs_manager.running_jobs)
         steps = 0
         while current_remaining + running_jobs > 0:
-            time.sleep(1)
             # scale factor - scale the running minutes
             _ = self.jobs_manager.gen_jobs(delta_time, scale_factor=0.5)
             if self.jobs_manager.queuing_jobs(delta_time) > 0:
@@ -191,7 +190,6 @@ class Scheduler(object):
             current_remaining = self.jobs_manager.remaining_jobs(delta_time)
             queuing_jobs = self.jobs_manager.queuing_jobs(delta_time)
             delta_time += 1
-            time.sleep(1)
             self.jobs_manager.step()
             self.release_finished_jobs(delta_time)
             running_jobs = len(self.jobs_manager.running_jobs)

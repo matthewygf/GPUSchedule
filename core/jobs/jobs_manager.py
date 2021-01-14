@@ -37,6 +37,8 @@ class JobsManager(object):
         return None
 
     def pop(self, delta, queue_idx=0, job_in_queue=0):
+        if self.job_queue_manager.length_of_queue(queue_idx) == 0:
+            return None
         j = self.job_queue_manager.pop(queue_idx, job_in_queue)
         if j.submit_time <= delta:
             return j

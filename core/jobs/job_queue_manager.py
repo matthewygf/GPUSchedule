@@ -61,6 +61,8 @@ class JobQueueManager(object):
         iterations = float(job_dict['iterations'])
         return job.Job(idx, model, duration, iterations, interval, submit_time, gpu=num_gpus)
 
+    def length_of_queue(self, qidx):
+        return len(self.queues[qidx])
 
     def _can_add(self, queue_idx):
             return len(self.queues[queue_idx]) < self.queue_limit[queue_idx]
@@ -115,7 +117,12 @@ class JobQueueManager(object):
         for q in range(0, self.num_queue):
             # logging.info(q)
             if len(self.queues[q]) > 0:
-                self.queue_credits[q] = sum([j.pending_time for j in self.queues[q]]) + len(self.queues[q])
+                # self.queue_credits[q] = sum([j.pending_time for j in self.queues[q]]) + len(self.queues[q])
+                max_pend = max(np.median([j.pending_time for j in self.queues[q]]), 0)
+                if max_pend < 1:
+                    self.queue_credits[q] = len(self.queues[q])
+                else:
+                    self.queue_credits[q] =  max_pend * len(self.queues[q])
             else:
                 self.queue_credits[q] = 0
 
